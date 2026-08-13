@@ -1,0 +1,27 @@
+[project]
+name = "crypto-coin-pipeline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "thanhtri271206", email = "thanhtri270106@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.43.70",
+    "dbt-core>=1.12.2",
+    "dbt-duckdb>=1.11.0",
+    "duckdb>=1.5.5",
+    "httpx>=0.28.1",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "tenacity>=9.1.4",
+]
+
+[project.scripts]
+crypto-coin-pipeline = "crypto_coin_pipeline:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
