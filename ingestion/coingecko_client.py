@@ -6,27 +6,23 @@ import httpx
 from dotenv import load_dotenv
 from pydantic import RootModel, ValidationError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
-try:
-    from . import schemas
-except ImportError:
-    import schemas
+from ingestion import schemas
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
 API_KEY = os.getenv("COINGECKO_API_KEY")
-DEFAULT_HEADERS = {"x-cg-demo-api-key": API_KEY}
+DEFAULT_HEADERS = {"x-cg-demo-api-key": API_KEY} if API_KEY else {}
 
-# QUAN TRỌNG: toàn bộ project (schema, dashboard, mart) giả định USD.
+
 # Nếu cần hỗ trợ đa currency, làm ở tầng transform/dbt — KHÔNG đổi default ở đây,
-# tránh mismatch âm thầm với các layer phía sau (vd GlobalMarketDataSchema.total_market_cap["usd"]).
+# tránh mismatch với các layer phía sau (vd GlobalMarketDataSchema.total_market_cap["usd"]).
 DEFAULT_VS_CURRENCY = "usd"
 
 
 def is_transient_error(exception: Exception) -> bool:
     """Chỉ retry lỗi tạm thời (network, 429, 5xx). Lỗi 4xx khác (vd 404 coin
-    không tồn tại) hoặc ValidationError sẽ KHÔNG được retry — retry những lỗi
-    này chỉ tốn quota vô ích vì kết quả sẽ luôn giống nhau."""
+    không tồn tại) hoặc ValidationError sẽ KHÔNG được retry"""
     if isinstance(exception, httpx.RequestError):
         return True
     if isinstance(exception, httpx.HTTPStatusError):
@@ -87,12 +83,16 @@ class CoinGeckoClient:
             response.raise_for_status()
             return response.json()
 
-    async def ingest_markets(
+    # ---------------------------------------------------------------------------
+    # RAW FETCH METHODS (I/O + Retry, KHÔNG phụ thuộc validation logic)
+    # ---------------------------------------------------------------------------
+
+    async def fetch_markets_raw(
         self,
         ids: str,
         vs_currency: str = DEFAULT_VS_CURRENCY,
         per_page: int = 100,
-    ) -> list[schemas.CoinMarketSchema]:
+    ) -> list | dict:
         """ids: chuỗi coin id cách nhau bởi dấu phẩy, vd 'bitcoin,ethereum'."""
         endpoint = "coins/markets"
         params = {
@@ -102,18 +102,9 @@ class CoinGeckoClient:
             "order": "market_cap_desc",
             "price_change_percentage": "1h,24h,7d",
         }
-        try:
-            raw_data = await self._get_with_retry(endpoint, params)
-            validated_data = CoinMarketListSchema.model_validate(raw_data)
-            return validated_data.root
-        except ValidationError as e:
-            logger.error(f"Validation error [coins/markets]: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error [coins/markets]: {e}")
-            raise
+        return await self._get_with_retry(endpoint, params)
 
-    async def ingest_coin_metadata(self, id: str) -> schemas.CoinMetadataSchema:
+    async def fetch_coin_metadata_raw(self, id: str) -> dict:
         endpoint = f"coins/{id}"
         params = {
             "localization": "false",
@@ -122,68 +113,76 @@ class CoinGeckoClient:
             "community_data": "false",
             "developer_data": "false",
         }
-        try:
-            raw_data = await self._get_with_retry(endpoint, params)
-            return schemas.CoinMetadataSchema.model_validate(raw_data)
-        except ValidationError as e:
-            logger.error(f"Validation error [coins/{id}]: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error [coins/{id}]: {e}")
-            raise
+        return await self._get_with_retry(endpoint, params)
 
-    async def ingest_coin_market_chart(
+    async def fetch_coin_market_chart_raw(
         self, id: str, vs_currency: str = DEFAULT_VS_CURRENCY, days: str = "max"
-    ) -> schemas.CoinMarketChartSchema:
-        """days='max': CHỈ dùng cho full backfill 1 lần duy nhất (theo plan).
+    ) -> dict:
+        """days='max': CHỈ dùng cho full backfill 1 lần duy nhất.
         Cho incremental fetch định kỳ, truyền days nhỏ (vd '7') để tránh
         re-fetch toàn bộ lịch sử mỗi lần chạy."""
         endpoint = f"coins/{id}/market_chart"
         params = {"vs_currency": vs_currency, "days": days}
-        try:
-            raw_data = await self._get_with_retry(endpoint, params)
-            return schemas.CoinMarketChartSchema.model_validate(raw_data)
-        except ValidationError as e:
-            logger.error(f"Validation error [market_chart/{id}]: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error [market_chart/{id}]: {e}")
-            raise
+        return await self._get_with_retry(endpoint, params)
 
-    async def ingest_global_market_data(self) -> schemas.GlobalMarketDataSchema:
+    async def fetch_global_market_data_raw(self) -> dict:
         # Endpoint /global KHÔNG nhận param vs_currency — API luôn trả sẵn
         # mọi currency trong response (total_market_cap.usd, .vnd, ...).
         endpoint = "global"
+        return await self._get_with_retry(endpoint, params={})
+
+    async def fetch_coin_ohlc_raw(
+        self, id: str, vs_currency: str = DEFAULT_VS_CURRENCY, days: str = "30"
+    ) -> list | dict:
+        endpoint = f"coins/{id}/ohlc"
+        params = {"vs_currency": vs_currency, "days": days}
+        return await self._get_with_retry(endpoint, params)
+
+    # ---------------------------------------------------------------------------
+    # VALIDATION METHODS (Pure Functions, nhận Raw -> trả Pydantic Model)
+    # ---------------------------------------------------------------------------
+
+    @staticmethod
+    def validate_markets(raw_data: list | dict) -> list[schemas.CoinMarketSchema]:
         try:
-            raw_data = await self._get_with_retry(endpoint, params={})
+            validated_data = CoinMarketListSchema.model_validate(raw_data)
+            return validated_data.root
+        except ValidationError as e:
+            logger.error(f"Validation error [coins/markets]: {e}")
+            raise
+
+    @staticmethod
+    def validate_coin_metadata(raw_data: dict) -> schemas.CoinMetadataSchema:
+        try:
+            return schemas.CoinMetadataSchema.model_validate(raw_data)
+        except ValidationError as e:
+            logger.error(f"Validation error [coins/metadata]: {e}")
+            raise
+
+    @staticmethod
+    def validate_market_chart(raw_data: dict) -> schemas.CoinMarketChartSchema:
+        try:
+            return schemas.CoinMarketChartSchema.model_validate(raw_data)
+        except ValidationError as e:
+            logger.error(f"Validation error [coins/market_chart]: {e}")
+            raise
+
+    @staticmethod
+    def validate_global_market_data(raw_data: dict) -> schemas.GlobalMarketDataSchema:
+        try:
             # QUAN TRỌNG: response có wrapper {"data": {...}} -> phải validate
-            # qua GlobalDataSchema (wrapper) rồi lấy .data, KHÔNG validate
-            # thẳng vào GlobalMarketDataSchema — nếu làm vậy, do mọi field
-            # đều Optional + extra="ignore", Pydantic sẽ KHÔNG báo lỗi mà
-            # âm thầm trả về object toàn field None/rỗng.
+            # qua GlobalDataSchema (wrapper) rồi lấy .data
             validated_wrapper = schemas.GlobalDataSchema.model_validate(raw_data)
             return validated_wrapper.data
         except ValidationError as e:
             logger.error(f"Validation error [global]: {e}")
             raise
-        except Exception as e:
-            logger.error(f"Unexpected error [global]: {e}")
-            raise
 
-    async def ingest_coin_ohlc(
-        self, id: str, vs_currency: str = DEFAULT_VS_CURRENCY, days: str = "30"
-    ) -> list[list[float]]:
-        endpoint = f"coins/{id}/ohlc"
-        params = {"vs_currency": vs_currency, "days": days}
+    @staticmethod
+    def validate_coin_ohlc(raw_data: list | dict) -> list[list[float]]:
         try:
-            raw_data = await self._get_with_retry(endpoint, params)
-            # Response là mảng phẳng -> CoinOHLCSchema là RootModel, validate
-            # rồi trả .root (không phải .candles — field đó không tồn tại).
             validated_data = schemas.CoinOHLCSchema.model_validate(raw_data)
             return validated_data.root
         except ValidationError as e:
-            logger.error(f"Validation error [ohlc/{id}]: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error [ohlc/{id}]: {e}")
+            logger.error(f"Validation error [coins/ohlc]: {e}")
             raise

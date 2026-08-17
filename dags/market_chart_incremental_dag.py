@@ -15,29 +15,31 @@ DEFAULT_TASK_KWARGS = {
     "retry_delay": timedelta(seconds=30),
 }
 
+# Endpoint: https://api.coingecko.com/api/v3/coins/{id}/market_chart
 with DAG(
-    dag_id="ingest_coin_metadata",
-    description="Ingest coin metadata for all coins listed on CoinGecko — weekly cadence",
+    dag_id="market_chart_incremental",
+    description="Incremental daily fetch for market chart data (days=7) for all coins.",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,  # "@weekly",  # mỗi tuần 1 lần
+    schedule=None,  # = "@daily",  # Chạy định kỳ mỗi ngày 1 lần
     catchup=False,
     max_active_tasks=3,  # Giới hạn số task chạy song song để tránh bị CoinGecko Rate-Limit (HTTP 429)
     tags=["ingestion", "phase-1"],
 ):
 
     @task(**DEFAULT_TASK_KWARGS)
-    def fetch_coin_metadata_raw(coin_id: str) -> dict:
-        """Task 1: Fetch raw metadata for a single coin and wrap payload with coin_id."""
+    def fetch_market_chart_raw(coin_id: str) -> dict:
+        """Task 1: Fetch incremental market chart data (days=7) for a single coin."""
+
         async def _fetch():
             async with CoinGeckoClient() as client:
-                raw_data = await client.fetch_coin_metadata_raw(id=coin_id)
+                raw_data = await client.fetch_coin_market_chart_raw(id=coin_id, days="7")
                 return {"coin_id": coin_id, "raw_data": raw_data}
 
         return asyncio.run(_fetch())
 
     @task(**DEFAULT_TASK_KWARGS)
-    def upload_coin_metadata_to_s3(payload: dict) -> str:
-        """Task 2: Upload raw metadata JSON to S3."""
+    def upload_market_chart_to_s3(payload: dict) -> str:
+        """Task 2: Upload incremental market chart raw JSON to S3 under endpoint coins/{coin_id}/market_chart."""
         coin_id = payload["coin_id"]
         raw_data = payload["raw_data"]
 
@@ -46,19 +48,19 @@ with DAG(
 
         writer = S3Writer()
         s3_key = writer.upload_raw_json(
-            endpoint=f"coins_metadata/{coin_id}",
+            endpoint=f"coins/{coin_id}/market_chart",
             raw_data=raw_data,
             fetched_at=fetched_at,
         )
         return s3_key
 
     @task(**DEFAULT_TASK_KWARGS)
-    def validate_coin_metadata(payload: dict) -> schemas.CoinMetadataSchema:
-        """Task 3: Validate raw metadata against Pydantic schema."""
+    def validate_market_chart(payload: dict) -> schemas.CoinMarketChartSchema:
+        """Task 3: Validate raw market chart data against Pydantic schema."""
         raw_data = payload["raw_data"]
-        return CoinGeckoClient.validate_coin_metadata(raw_data)
+        return CoinGeckoClient.validate_market_chart(raw_data)
 
-    # Dynamic Task Mapping (1-to-1 mapping via payload wrapper)
-    metadata_payloads = fetch_coin_metadata_raw.expand(coin_id=COIN_IDS)
-    upload_coin_metadata_to_s3.expand(payload=metadata_payloads)
-    validate_coin_metadata.expand(payload=metadata_payloads)
+    # Dynamic Task Mapping: fetch_market_chart_raw -> upload_market_chart_to_s3 -> validate_market_chart
+    chart_payloads = fetch_market_chart_raw.expand(coin_id=COIN_IDS)
+    upload_market_chart_to_s3.expand(payload=chart_payloads)
+    validate_market_chart.expand(payload=chart_payloads)
