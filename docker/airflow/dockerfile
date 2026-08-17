@@ -1,0 +1,38 @@
+# Extend đúng image + tag đang dùng trong docker-compose.yml (phải khớp
+# nhau, nếu đổi version ở 1 chỗ thì đổi luôn ở chỗ kia).
+FROM apache/airflow:3.0.2-python3.12
+
+# CHỈ cài dependency mà code trong ingestion/ + dags/ thực sự import lúc
+# runtime (httpx, tenacity, pydantic, boto3, pyyaml, python-dotenv).
+# KHÔNG cài dbt-core, streamlit, pytest, chromadb... — những thứ đó không
+# chạy bên trong container Airflow, cài vào chỉ tổ làm image nặng và tăng
+# nguy cơ xung đột version với dependency riêng của Airflow.
+COPY requirements-airflow.txt /requirements-airflow.txt
+
+# Cài thêm dependency của project (không dùng --constraint vì constraints
+# chỉ dành cho bước install apache-airflow ban đầu — xem comment trong file
+# constraints-3.0.2/constraints-3.12.txt dòng 36-39). Thay vào đó, ghim
+# apache-airflow==3.0.2 để pip không tự nâng/hạ version của Airflow.
+RUN pip install --no-cache-dir \
+    "apache-airflow==3.0.2" \
+    -r /requirements-airflow.txt
+
+# ---------------------------------------------------------------------------
+# dbt-core + dbt-duckdb — cài vào 1 VENV RIÊNG (/opt/dbt_venv), KHÔNG cài
+# vào site-packages chính của Airflow.
+#
+# Lý do: dbt-core cần version jinja2/click/... khác với version Airflow tự
+# pin trong constraints file của nó. Cài chung 1 môi trường rất dễ conflict
+# (uv/pip resolve lỗi, hoặc "cài được" nhưng lệch version ngầm khiến 1 trong
+# 2 bên chạy sai). Tách venv giải quyết triệt để, không cần Docker phức tạp
+# hơn (không cần container thứ 2, không cần Docker socket).
+#
+# DAG sau này gọi dbt qua BashOperator, trỏ thẳng vào binary trong venv này
+# (/opt/dbt_venv/bin/dbt) — xem ví dụ cách gọi bên dưới README.
+# ---------------------------------------------------------------------------
+USER root
+RUN python -m venv /opt/dbt_venv
+COPY requirements-dbt.txt /requirements-dbt.txt
+RUN /opt/dbt_venv/bin/pip install --no-cache-dir -r /requirements-dbt.txt \
+    && chown -R airflow:root /opt/dbt_venv
+USER airflow

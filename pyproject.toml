@@ -1,25 +1,57 @@
 [project]
 name = "crypto-coin-pipeline"
 version = "0.1.0"
-description = "Add your description here"
+description = "Crypto market data engineering project (CoinGecko -> S3/MinIO -> DuckDB/dbt -> Dashboard)"
 readme = "README.md"
 authors = [
     { name = "thanhtri271206", email = "thanhtri270106@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "boto3>=1.43.70",
-    "dbt-core>=1.12.2",
-    "dbt-duckdb>=1.11.0",
-    "duckdb>=1.5.5",
-    "httpx>=0.28.1",
-    "logger>=1.4",
-    "logging>=0.4.9.6",
-    "pydantic>=2.13.4",
+    # Dùng ở mọi nơi (ingestion script, dbt macro, dashboard...)
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
-    "tenacity>=9.1.4",
 ]
+
+[project.optional-dependencies]
+# Gọi CoinGecko API, retry/backoff, validate response — dùng trong ingestion/
+ingestion = [
+    "httpx>=0.28.1",
+    "tenacity>=9.1.4",
+    "pydantic>=2.13.4",
+]
+
+# Ghi raw JSON lên S3/MinIO — dùng trong ingestion/s3_writer.py
+storage = [
+    "boto3>=1.43.70",
+]
+
+# Transform layer — dbt + DuckDB. Cài local để dev/test dbt model nhanh mà
+# không cần rebuild Docker image mỗi lần sửa .sql. Trong Docker, nhóm này
+# được cài vào venv RIÊNG (/opt/dbt_venv), KHÔNG chung với Airflow — xem
+# docker/airflow/Dockerfile.
+warehouse = [
+    "duckdb>=1.5.5",
+    "dbt-core>=1.12.2",
+    "dbt-duckdb>=1.11.0",
+]
+
+# Testing + lint — pytest cho ingestion, moto để mock S3 không cần gọi thật
+dev = [
+    "pytest>=8.3.0",
+    "pytest-mock>=3.14.0",
+    "responses>=0.25.0",
+    "moto>=5.2.2",
+    "ruff>=0.6.0",
+]
+
+# GHI CHÚ QUAN TRỌNG: KHÔNG thêm apache-airflow/apache-airflow-* vào đây.
+# Airflow chỉ chạy bên trong Docker container (qua docker-compose), không
+# chạy trực tiếp bằng `uv run` trên máy local — cài chung venv với dbt-core
+# rất dễ conflict version (cả 2 đều pin chặt jinja2/click...). Nếu muốn IDE
+# autocomplete cho file trong dags/, chấp nhận "unresolved import" ở đó,
+# hoặc cài apache-airflow vào 1 venv TÁCH RIÊNG chỉ dùng cho IDE (không
+# phải venv chính của project).
 
 [project.scripts]
 crypto-coin-pipeline = "crypto_coin_pipeline:main"
@@ -27,3 +59,6 @@ crypto-coin-pipeline = "crypto_coin_pipeline:main"
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.pyright]
+extraPaths = ["."]

@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: minio_server
+    ports:
+      - "9000:9000" # MinIO API Port
+      - "9001:9001" # MinIO Web Console Port
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: adminuser
+      MINIO_ROOT_PASSWORD: supersecretpassword123
+    command: server --console-address ":9001" /data
+    restart: unless-stopped
+    networks:
+      - minio_network
+
+  createbuckets:
+    image: minio/mc:latest
+    container_name: minio_create_buckets
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 adminuser supersecretpassword123;
+      /usr/bin/mc mb myminio/crypto-raw-lake --ignore-existing;
+      exit 0;
+      "
+    networks:
+      - minio_network
+
+volumes:
+  minio_data:
+    driver: local
+
+networks:
+  minio_network:
+    driver: bridge
+    name: minio_network
