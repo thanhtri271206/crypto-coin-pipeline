@@ -1,5 +1,6 @@
 import asyncio
 from datetime import timedelta
+from typing import cast
 import pendulum
 
 from airflow import DAG
@@ -51,9 +52,13 @@ with DAG(
         )
         return s3_key
 
-    @task
-    def validate_market_data(raw_data: list | dict) -> list[schemas.CoinMarketSchema]:
-        return CoinGeckoClient.validate_markets(raw_data)
+    @task(**DEFAULT_TASK_KWARGS)
+    def validate_market_data(s3_key: str) -> dict:
+        """Task 3: Validate stored market snapshot from S3 against Pydantic schema."""
+        writer = S3Writer()
+        raw_data = writer.read_raw_json(s3_key)
+        validated = CoinGeckoClient.validate_markets(raw_data)
+        return {"s3_key": s3_key, "coins_count": len(validated), "status": "valid"}
 
     # ------------------------------------------------------------------
     # Nhánh 2: global — market overview KPI (BTC dominance, total market cap...)
@@ -79,16 +84,21 @@ with DAG(
             fetched_at=fetched_at,
         )
 
-    @task
-    def validate_global_data(raw_data: dict) -> schemas.GlobalMarketDataSchema:
-        return CoinGeckoClient.validate_global_market_data(raw_data)
+    @task(**DEFAULT_TASK_KWARGS)
+    def validate_global_data(s3_key: str) -> dict:
+        """Task 6: Validate stored global market data from S3 against Pydantic schema."""
+        writer = S3Writer()
+        raw_data = cast(dict, writer.read_raw_json(s3_key))
+        CoinGeckoClient.validate_global_market_data(raw_data)
+        return {"s3_key": s3_key, "status": "valid"}
 
-    # Flow 1: coins/markets
+    # Flow 1: coins/markets (fetch -> upload -> validate)
     markets_data = fetch_markets_raw()
-    upload_markets_to_s3(raw_data=markets_data)
-    validate_market_data(raw_data=markets_data)
+    markets_s3_key = upload_markets_to_s3(raw_data=markets_data)
+    validate_market_data(s3_key=markets_s3_key)
 
-    # Flow 2: global
+    # Flow 2: global (fetch -> upload -> validate)
     global_data = fetch_global_raw()
-    upload_global_to_s3(raw_data=global_data)
-    validate_global_data(raw_data=global_data)
+    global_s3_key = upload_global_to_s3(raw_data=global_data)
+    validate_global_data(s3_key=global_s3_key)
+

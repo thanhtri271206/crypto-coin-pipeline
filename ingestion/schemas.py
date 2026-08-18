@@ -92,15 +92,20 @@ class CoinLinksSchema(BaseModel):
     mạng xã hội ít giá trị phân tích (chat, forum, announcement...)."""
     model_config = ConfigDict(extra="ignore")
  
-    homepage: List[str] = []
-    blockchain_site: List[str] = []
+    homepage: Optional[List[str]] = []
+    blockchain_site: Optional[List[str]] = []
  
     @field_validator("homepage", "blockchain_site")
     @classmethod
-    def drop_empty_strings(cls, v: List[str]) -> List[str]:
+    def drop_empty_strings(cls, v: Optional[List[str]]) -> Optional[List[str]]:
         """CoinGecko hay trả về mảng có nhiều phần tử rỗng ("") — lọc bỏ
         ngay ở bước validate để dbt không phải xử lý lại."""
-        return [url for url in v if url]
+        # return [url for url in v if url]
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [url for url in v if url]
+        return v
  
  
 class CoinMetadataSchema(BaseModel):
@@ -123,8 +128,11 @@ class CoinMetadataSchema(BaseModel):
     market_cap_rank: Optional[int] = None
  
     # platforms: dict {tên_chain: contract_address}, vd {"ethereum": "0xabc..."}
-    # Native coin (BTC) sẽ trả về {"": ""} -> giữ nguyên dict, xử lý lọc ở dbt/transform
-    platforms: Dict[str, str] = {}
+    # Native coin (BTC) trả về {"": ""}. Coin đa chuỗi (SOL, ADA...) có thêm các
+    # chain entry với value null (vd {"solana": null, "ethereum": "0x..."}) —
+    # phải dùng Optional[str] để không fail validation.
+    # Lọc null/empty value để xử lý ở tầng dbt/transform, không làm ở schema level.
+    platforms: Dict[str, Optional[str]] = {}
  
  
 # ---------------------------------------------------------------------------

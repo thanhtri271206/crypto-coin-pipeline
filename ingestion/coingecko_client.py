@@ -75,6 +75,7 @@ class CoinGeckoClient:
 
         async with self._semaphore:
             logger.info(f"GET {url} with params: {params}")
+            print(f"Header: {DEFAULT_HEADERS}")
             response = await self.client.get(url, params=params)
             logger.debug(
                 f"Response {response.status_code} in "

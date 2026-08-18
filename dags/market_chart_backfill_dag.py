@@ -25,8 +25,7 @@ with DAG(
     description="One-time manual backfill for historical market chart data (days=max) for all coins.",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,  # Manual trigger execution only
-    catchup=False,
-    max_active_tasks=2,  # Giới hạn số task chạy song song để tránh dính Rate Limit (HTTP 429)
+    max_active_tasks=5,  # 5 coins song song cho backfill, vừa đủ nhanh vừa an toàn API rate limit
     tags=["ingestion", "phase-1", "backfill"],
 ):
 
@@ -35,7 +34,7 @@ with DAG(
         """Fetch raw historical market chart, upload to S3, and validate schema."""
         async def _fetch():
             async with CoinGeckoClient() as client:
-                return await client.fetch_coin_market_chart_raw(id=coin_id, days="max")
+                return await client.fetch_coin_market_chart_raw(id=coin_id, days="365")
 
         raw_data = asyncio.run(_fetch())
 

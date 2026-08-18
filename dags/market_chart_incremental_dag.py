@@ -1,5 +1,6 @@
 import asyncio
 from datetime import timedelta
+from typing import cast
 import pendulum
 
 from airflow import DAG
@@ -22,7 +23,7 @@ with DAG(
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,  # = "@daily",  # Chạy định kỳ mỗi ngày 1 lần
     catchup=False,
-    max_active_tasks=3,  # Giới hạn số task chạy song song để tránh bị CoinGecko Rate-Limit (HTTP 429)
+    max_active_tasks=10,  # 1 slot/coin, tránh task starvation khi 30 tasks tranh slot
     tags=["ingestion", "phase-1"],
 ):
 
@@ -55,12 +56,20 @@ with DAG(
         return s3_key
 
     @task(**DEFAULT_TASK_KWARGS)
-    def validate_market_chart(payload: dict) -> schemas.CoinMarketChartSchema:
-        """Task 3: Validate raw market chart data against Pydantic schema."""
-        raw_data = payload["raw_data"]
-        return CoinGeckoClient.validate_market_chart(raw_data)
+    def validate_market_chart(s3_key: str) -> dict:
+        """Task 3: Validate raw market chart data from S3 against Pydantic schema."""
+        writer = S3Writer()
+        raw_data = cast(dict, writer.read_raw_json(s3_key))
+        validated = CoinGeckoClient.validate_market_chart(raw_data)
+        # Chỉ return status summary gọn nhẹ để bảo vệ Airflow XCom DB & tránh lỗi Structured XCom với None/arrays
+        return {
+            "s3_key": s3_key,
+            "prices_count": len(validated.prices),
+            "status": "valid",
+        }
 
-    # Dynamic Task Mapping: fetch_market_chart_raw -> upload_market_chart_to_s3 -> validate_market_chart
+    # Dynamic Task Mapping: fetch -> upload -> validate
     chart_payloads = fetch_market_chart_raw.expand(coin_id=COIN_IDS)
-    upload_market_chart_to_s3.expand(payload=chart_payloads)
-    validate_market_chart.expand(payload=chart_payloads)
+    s3_keys = upload_market_chart_to_s3.expand(payload=chart_payloads)
+    validate_market_chart.expand(s3_key=s3_keys)
+

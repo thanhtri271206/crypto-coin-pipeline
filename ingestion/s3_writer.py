@@ -117,6 +117,21 @@ class S3Writer:
             ContentType="application/json",
         )
 
+    def read_raw_json(self, key: str) -> dict | list:
+        """Đọc và parse JSON file từ S3/MinIO theo key.
+
+        Dùng cho validate task để đọc lại data đã upload thay vì đọc từ XCom
+        — tránh Airflow 3.x dual-consumer XCom bug và giảm XCom payload size.
+        """
+        try:
+            obj = self.s3_client.get_object(Bucket=self.bucket_name, Key=key)
+            raw_bytes = obj["Body"].read()
+            logger.info(f"Read {len(raw_bytes)}B from s3://{self.bucket_name}/{key}")
+            return json.loads(raw_bytes.decode("utf-8"))
+        except Exception as e:
+            logger.error(f"Failed to read s3://{self.bucket_name}/{key}: {e}")
+            raise
+
     def upload_raw_json(
         self,
         endpoint: str,

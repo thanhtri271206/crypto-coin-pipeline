@@ -1,5 +1,6 @@
 import asyncio
 from datetime import timedelta
+from typing import cast
 import pendulum
 
 from airflow import DAG
@@ -19,9 +20,14 @@ with DAG(
     dag_id="ingest_coin_metadata",
     description="Ingest coin metadata for all coins listed on CoinGecko — weekly cadence",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,  # "@weekly",  # mỗi tuần 1 lần
+    schedule=None,  # "@weekly",
     catchup=False,
-    max_active_tasks=3,  # Giới hạn số task chạy song song để tránh bị CoinGecko Rate-Limit (HTTP 429)
+    # max_active_tasks=10 (thay vì 3) để tránh task starvation:
+    # 10 coins × 3 tasks (fetch/upload/validate) = 30 tasks tranh 3 slot
+    # → các tasks sau cùng chờ quá lâu trong queue → "requeue exceeded max → FAIL".
+    # CoinGecko rate-limit vẫn được xử lý bởi retry mechanism (retries=3,
+    # wait_exponential) khi API trả 429 — không cần giới hạn cứng ở đây.
+    max_active_tasks=10,
     tags=["ingestion", "phase-1"],
 ):
 
@@ -53,12 +59,34 @@ with DAG(
         return s3_key
 
     @task(**DEFAULT_TASK_KWARGS)
-    def validate_coin_metadata(payload: dict) -> schemas.CoinMetadataSchema:
-        """Task 3: Validate raw metadata against Pydantic schema."""
-        raw_data = payload["raw_data"]
-        return CoinGeckoClient.validate_coin_metadata(raw_data)
+    def validate_coin_metadata(s3_key: str) -> dict:
+        """Task 3: Validate stored metadata from S3 against Pydantic schema.
 
-    # Dynamic Task Mapping (1-to-1 mapping via payload wrapper)
+        Đọc trực tiếp từ S3 thay vì nhận raw_data qua XCom vì 2 lý do:
+        1. Airflow 3.x dual-consumer XCom bug: cả upload lẫn validate đều
+           expand từ cùng metadata_payloads XCom source — gây race condition
+           ở API server khi nhiều task đọc XCom đồng thời.
+        2. Validate đọc data đã persist = đảm bảo data trên S3 không bị corrupt
+           trong quá trình upload (validate-what-you-store, not what-you-fetched).
+
+        Return value: flat dict nhỏ (KHÔNG dùng model_dump() toàn bộ) vì
+        Airflow 3.x decompose dict return thành từng XCom entry riêng per-key.
+        Các field Optional (genesis_date=None, market_cap_rank=None) gây HTTP 422
+        khi push XCom vì API server yêu cầu body non-null.
+        """
+        writer = S3Writer()
+        raw_data = cast(dict, writer.read_raw_json(s3_key))  # coins/{id} luôn trả dict
+        validated = CoinGeckoClient.validate_coin_metadata(raw_data)
+        # Chỉ trả về minimal summary — data đầy đủ đã có trên S3
+        return {
+            "coin_id": validated.id,
+            "symbol": validated.symbol,
+            "status": "valid",
+        }
+
+    # Dynamic Task Mapping
+    # fetch → upload (payload XCom, coin_id + raw_data)
+    # upload → validate (s3_key string XCom — nhỏ, không gây API server overload)
     metadata_payloads = fetch_coin_metadata_raw.expand(coin_id=COIN_IDS)
-    upload_coin_metadata_to_s3.expand(payload=metadata_payloads)
-    validate_coin_metadata.expand(payload=metadata_payloads)
+    s3_keys = upload_coin_metadata_to_s3.expand(payload=metadata_payloads)
+    validate_coin_metadata.expand(s3_key=s3_keys)
