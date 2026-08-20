@@ -1,0 +1,50 @@
+version: 2
+
+models:
+  - name: stg_coins_markets
+    description: >
+      Raw snapshot giá/market data từ coins/markets, đọc trực tiếp từ MinIO.
+      Grain: 1 dòng = 1 coin tại 1 lần fetch (fetched_at).
+    columns:
+      - name: coin_id
+        description: CoinGecko coin id (vd "bitcoin")
+        data_tests:
+          - not_null
+      - name: fetched_at
+        description: Thời điểm lần fetch này chạy (parse từ tên file S3)
+        data_tests:
+          - not_null
+      - name: current_price
+        data_tests:
+          - not_null
+      # Composite key thực sự là (coin_id, fetched_at), không phải coin_id
+      # đơn lẻ — 1 coin xuất hiện nhiều lần theo từng lần fetch.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - fetched_at
+
+  - name: stg_global
+    columns:
+      - name: fetched_at
+        data_tests:
+          - not_null
+      - name: total_market_cap_usd
+        data_tests:
+          - not_null
+
+  - name: stg_coin_metadata
+    columns:
+      - name: coin_id
+        data_tests:
+          - not_null
+
+  - name: stg_market_chart
+    columns:
+      - name: coin_id
+        data_tests:
+          - not_null
+      - name: ts_ms
+        data_tests:
+          - not_null

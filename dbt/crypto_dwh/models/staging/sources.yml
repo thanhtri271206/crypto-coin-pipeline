@@ -1,0 +1,255 @@
+version: 2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RAW SOURCES — S3 / MinIO (đọc qua DuckDB httpfs + external_location)
+#
+# Với dbt-duckdb, ta cấu hình external_location cho từng source table.
+# Khi model gọi {{ source('source_name', 'table_name') }}, dbt-duckdb sẽ tự động
+# biên dịch thành hàm read_json_auto / read_json tương ứng, đồng thời tạo
+# mối liên kết chính xác trên Lineage Graph (DAG).
+# ─────────────────────────────────────────────────────────────────────────────
+
+sources:
+  - name: raw_coins_markets
+    description: >
+      Dữ liệu thị trường tổng hợp cho tất cả coin, fetch từ CoinGecko API
+      endpoint /coins/markets. Mỗi file JSON chứa một snapshot tại thời điểm
+      fetched_at, được partition theo date (ngày) và fetched_at (giờ).
+    meta:
+      format: json
+      hive_partitioned: true
+      partitions: [date, fetched_at]
+      source_api: "CoinGecko /coins/markets"
+
+    tables:
+      - name: coins_markets
+        description: >
+          Snapshot giá, market cap, volume và các chỉ số thị trường của từng coin
+          tại mỗi thời điểm fetch. Mỗi record là một coin trong một lần fetch.
+        config:
+          external_location: >
+            read_json_auto(
+              's3://{{ env_var("S3_BUCKET_NAME") }}/raw/coins/markets/date=*/fetched_at=*.json',
+              hive_partitioning = true,
+              filename = true
+            )
+        columns:
+          - name: id
+            description: CoinGecko coin ID (e.g. "bitcoin", "ethereum")
+          - name: symbol
+            description: Ticker symbol (e.g. "btc", "eth")
+          - name: name
+            description: Tên hiển thị của coin
+          - name: current_price
+            description: Giá hiện tại tính bằng USD
+          - name: market_cap
+            description: Market capitalization tính bằng USD
+          - name: market_cap_rank
+            description: Xếp hạng market cap toàn cầu
+          - name: total_volume
+            description: Tổng khối lượng giao dịch 24h tính bằng USD
+          - name: high_24h
+            description: Giá cao nhất trong 24h qua (USD)
+          - name: low_24h
+            description: Giá thấp nhất trong 24h qua (USD)
+          - name: price_change_24h
+            description: Thay đổi giá tuyệt đối trong 24h (USD)
+          - name: price_change_percentage_24h
+            description: Thay đổi giá phần trăm trong 24h
+          - name: circulating_supply
+            description: Lượng coin đang lưu thông
+          - name: total_supply
+            description: Tổng lượng coin tồn tại
+          - name: max_supply
+            description: Giới hạn cung tối đa (null nếu không có giới hạn)
+          - name: last_updated
+            description: Timestamp cuối cùng CoinGecko cập nhật giá (ISO 8601)
+          - name: date
+            description: Hive partition — ngày snapshot (YYYY-MM-DD)
+          - name: fetched_at
+            description: Hive partition — thời điểm fetch (YYYY-MM-DDThh-mm-ssZ)
+
+  # ───────────────────────────────────────────────────────────────────────────
+
+  - name: raw_coins_metadata
+    description: >
+      Metadata chi tiết của từng coin, fetch từ CoinGecko API endpoint
+      /coins/{id}. Mỗi file JSON chứa thông tin của một coin tại một thời điểm
+      fetch, được partition theo coin_id (tên thư mục) và date/fetched_at.
+    meta:
+      format: json
+      hive_partitioned: true
+      partitions: [coin_id (folder), date, fetched_at]
+      source_api: "CoinGecko /coins/{id}"
+
+    tables:
+      - name: coins_metadata
+        description: >
+          Thông tin tĩnh và bán tĩnh của coin: mô tả, platform, links, categories,
+          sentiment, market rank. Các field platforms và detail_platforms có
+          dynamic keys (tên blockchain) nên được lưu dạng JSON thô.
+        config:
+          formatter: "oldstyle"
+          external_location: >
+            read_json(
+              's3://{{ env_var("S3_BUCKET_NAME") }}/raw/coins_metadata/*/date=*/fetched_at=*.json',
+              columns = {
+                'id':                                   'VARCHAR',
+                'symbol':                               'VARCHAR',
+                'name':                                 'VARCHAR',
+                'web_slug':                             'VARCHAR',
+                'asset_platform_id':                    'VARCHAR',
+                'platforms':                            'JSON',
+                'detail_platforms':                     'JSON',
+                'block_time_in_minutes':                'BIGINT',
+                'hashing_algorithm':                    'VARCHAR',
+                'categories':                           'JSON',
+                'description':                          'JSON',
+                'links':                                'JSON',
+                'image':                                'JSON',
+                'country_origin':                       'VARCHAR',
+                'genesis_date':                         'VARCHAR',
+                'contract_address':                     'VARCHAR',
+                'public_notice':                        'VARCHAR',
+                'market_cap_rank':                      'BIGINT',
+                'market_cap_rank_with_rehypothecated':  'BIGINT',
+                'preview_listing':                      'BOOLEAN',
+                'has_supply_breakdown':                 'BOOLEAN',
+                'watchlist_portfolio_users':            'BIGINT',
+                'sentiment_votes_up_percentage':        'DOUBLE',
+                'sentiment_votes_down_percentage':      'DOUBLE',
+                'status_updates':                       'JSON',
+                'additional_notices':                   'JSON',
+                'last_updated':                         'VARCHAR'
+              },
+              hive_partitioning = true,
+              filename = true
+            )
+        columns:
+          - name: id
+            description: CoinGecko coin ID
+          - name: symbol
+            description: Ticker symbol
+          - name: name
+            description: Tên hiển thị
+          - name: web_slug
+            description: URL slug dùng trên CoinGecko website
+          - name: asset_platform_id
+            description: Platform chính mà token được phát hành (null với native coins)
+          - name: platforms
+            description: >
+              JSON object — map blockchain_name → contract_address.
+              Dynamic keys nên được giữ dạng JSON thô.
+          - name: detail_platforms
+            description: >
+              JSON object — map blockchain_name → {decimal_place, contract_address, geckoterminal_url}.
+              Dynamic keys nên được giữ dạng JSON thô.
+          - name: categories
+            description: JSON array — danh sách categories của coin
+          - name: description
+            description: JSON object — mô tả coin theo ngôn ngữ (key = language code)
+          - name: links
+            description: JSON object — các link liên quan (homepage, github, twitter, ...)
+          - name: image
+            description: JSON object — URLs ảnh của coin (thumb, small, large)
+          - name: hashing_algorithm
+            description: Thuật toán hash (chỉ có với PoW coins, null với tokens)
+          - name: block_time_in_minutes
+            description: Thời gian trung bình giữa 2 block (phút)
+          - name: country_origin
+            description: Quốc gia khởi tạo
+          - name: genesis_date
+            description: Ngày ra mắt coin (YYYY-MM-DD)
+          - name: contract_address
+            description: Contract address chính trên platform chính
+          - name: market_cap_rank
+            description: Xếp hạng market cap
+          - name: watchlist_portfolio_users
+            description: Số người dùng đang theo dõi coin trên CoinGecko
+          - name: sentiment_votes_up_percentage
+            description: Tỷ lệ % sentiment tích cực từ cộng đồng
+          - name: sentiment_votes_down_percentage
+            description: Tỷ lệ % sentiment tiêu cực từ cộng đồng
+          - name: last_updated
+            description: Timestamp cuối cùng CoinGecko cập nhật (ISO 8601)
+          - name: date
+            description: Hive partition — ngày snapshot (YYYY-MM-DD)
+          - name: fetched_at
+            description: Hive partition — thời điểm fetch (YYYY-MM-DDThh-mm-ssZ)
+
+  # ───────────────────────────────────────────────────────────────────────────
+
+  - name: raw_market_chart
+    description: >
+      Dữ liệu time-series giá, market cap và volume của từng coin theo ngày,
+      fetch từ CoinGecko API endpoint /coins/{id}/market_chart. Mỗi file JSON
+      chứa toàn bộ time-series của một coin tại một lần fetch.
+    meta:
+      format: json
+      hive_partitioned: true
+      partitions: [coin_id (folder), date, fetched_at]
+      source_api: "CoinGecko /coins/{id}/market_chart"
+
+    tables:
+      - name: market_chart
+        description: >
+          Time-series dạng mảng [[timestamp_ms, value], ...] cho giá, market cap
+          và volume. Mỗi record là một snapshot fetch cho một coin.
+        config:
+          external_location: >
+            read_json_auto(
+              's3://{{ env_var("S3_BUCKET_NAME") }}/raw/coins/*/market_chart/date=*/fetched_at=*.json',
+              hive_partitioning = true,
+              filename = true
+            )
+        columns:
+          - name: prices
+            description: >
+              JSON array of [timestamp_ms, price_usd] — time-series giá theo ngày
+          - name: market_caps
+            description: >
+              JSON array of [timestamp_ms, market_cap_usd] — time-series market cap
+          - name: total_volumes
+            description: >
+              JSON array of [timestamp_ms, volume_usd] — time-series tổng volume
+          - name: date
+            description: Hive partition — ngày snapshot (YYYY-MM-DD)
+          - name: fetched_at
+            description: Hive partition — thời điểm fetch (YYYY-MM-DDThh-mm-ssZ)
+
+  # ───────────────────────────────────────────────────────────────────────────
+
+  - name: raw_global
+    description: >
+      Dữ liệu tổng quan thị trường crypto toàn cầu, fetch từ CoinGecko API
+      endpoint /global. Chứa tổng market cap, volume, số lượng coin active
+      và dominance của các coin lớn.
+    meta:
+      format: json
+      hive_partitioned: true
+      partitions: [date, fetched_at]
+      source_api: "CoinGecko /global"
+
+    tables:
+      - name: global
+        description: >
+          Snapshot các chỉ số vĩ mô của toàn thị trường crypto tại mỗi thời điểm
+          fetch. Field data là object lồng nhau chứa toàn bộ số liệu.
+        config:
+          external_location: >
+            read_json_auto(
+              's3://{{ env_var("S3_BUCKET_NAME") }}/raw/global/date=*/fetched_at=*.json',
+              hive_partitioning = true,
+              filename = true
+            )
+        columns:
+          - name: data
+            description: >
+              JSON object chứa toàn bộ global metrics:
+              active_cryptocurrencies, total_market_cap (by currency),
+              total_volume (by currency), market_cap_percentage (dominance by coin),
+              markets, updated_at, ...
+          - name: date
+            description: Hive partition — ngày snapshot (YYYY-MM-DD)
+          - name: fetched_at
+            description: Hive partition — thời điểm fetch (YYYY-MM-DDThh-mm-ssZ)

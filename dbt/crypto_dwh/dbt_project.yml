@@ -34,3 +34,20 @@ models:
     # Config indicated by + and applies to all files under models/example/
     example:
       +materialized: view
+    
+    staging:
+      +materialized: view
+
+    intermediate:
+      +materialized: view
+
+    marts:
+      +materialized: table
+      core:
+        +schema: core
+      market_health:
+        +schema: marts
+      top_movers:
+        +schema: marts
+      coin_performance:
+        +schema: marts

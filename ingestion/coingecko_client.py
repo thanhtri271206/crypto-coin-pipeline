@@ -74,8 +74,8 @@ class CoinGeckoClient:
         url = f"{self.base_url}/{endpoint}"
 
         async with self._semaphore:
+            print(f"[API Request] GET {url} | params: {params}")
             logger.info(f"GET {url} with params: {params}")
-            print(f"Header: {DEFAULT_HEADERS}")
             response = await self.client.get(url, params=params)
             logger.debug(
                 f"Response {response.status_code} in "
