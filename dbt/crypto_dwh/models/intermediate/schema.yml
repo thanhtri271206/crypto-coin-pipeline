@@ -1,0 +1,78 @@
+version: 2
+
+models:
+
+  - name: int_market_snapshot_dedup
+    description: >
+      Dedup stg_market_chart theo (coin_id, ts_ms): giữ bản ghi có fetched_at mới nhất
+      để xử lý trường hợp pipeline chạy lại nhiều lần trong cùng khung giờ.
+      Grain: 1 dòng = 1 coin tại 1 mốc thời gian time-series (ts_ms).
+    columns:
+      - name: coin_id
+        description: CoinGecko coin ID
+        data_tests:
+          - not_null
+      - name: ts_ms
+        description: Timestamp của điểm time-series (milliseconds epoch)
+        data_tests:
+          - not_null
+      - name: price_usd
+        description: Giá USD tại mốc ts_ms
+      - name: fetched_at
+        description: Thời điểm pipeline fetch (dùng để chọn bản ghi mới nhất khi dedup)
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - ts_ms
+
+  - name: int_coins_markets_dedup
+    description: >
+      Dedup stg_coins_markets theo (coin_id, fetched_at): giữ bản ghi mới nhất
+      để xử lý trường hợp pipeline chạy lại nhiều lần trong cùng khung giờ.
+      Grain: 1 dòng = 1 coin tại 1 lần fetch (coin_id, fetched_at).
+    columns:
+      - name: coin_id
+        description: CoinGecko coin ID
+        data_tests:
+          - not_null
+      - name: fetched_at
+        description: Thời điểm pipeline fetch (parse từ tên file S3)
+        data_tests:
+          - not_null
+      - name: current_price
+        description: Giá hiện tại (USD)
+        data_tests:
+          - not_null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - fetched_at
+
+  - name: int_coin_metadata_latest
+    description: >
+      Dedup stg_coin_metadata theo coin_id: giữ bản ghi có api_last_updated mới nhất.
+      Đây là nguồn duy nhất cho dim_coin — mọi enrichment hay validation
+      nên được thêm vào đây trước khi đến mart layer.
+      Grain: 1 dòng = 1 coin (bản ghi metadata mới nhất).
+    columns:
+      - name: coin_id
+        description: CoinGecko coin ID
+        data_tests:
+          - not_null
+          - unique
+      - name: symbol
+        description: Ticker symbol viết thường
+        data_tests:
+          - not_null
+      - name: name
+        description: Tên hiển thị của coin
+        data_tests:
+          - not_null
+      - name: fetched_at
+        description: Thời điểm pipeline fetch metadata gần nhất
+        data_tests:
+          - not_null
