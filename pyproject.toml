@@ -8,9 +8,12 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "pandas>=3.0.5",
+    "plotly>=6.9.0",
     # Dùng ở mọi nơi (ingestion script, dbt macro, dashboard...)
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
+    "streamlit>=1.62.0",
 ]
 
 [project.optional-dependencies]

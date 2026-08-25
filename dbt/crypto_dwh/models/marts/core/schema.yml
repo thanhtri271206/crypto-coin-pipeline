@@ -1,0 +1,310 @@
+version: 2
+
+models:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DIMENSIONS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: dim_coin
+    description: >
+      Dimension table chứa thông tin tĩnh và bán tĩnh của từng coin.
+      Grain: 1 dòng = 1 coin (bản ghi mới nhất theo api_last_updated).
+      Nguồn: int_coin_metadata_latest (dedup và business logic tập trung tại intermediate layer).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: dim_coin_sk
+        description: Surrogate key — MD5 hash của coin_id (dbt_utils.generate_surrogate_key)
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: coin_id
+        description: CoinGecko natural key (e.g. "bitcoin", "ethereum")
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: symbol
+        description: Ticker symbol viết thường (e.g. "btc", "eth")
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: name
+        description: Tên hiển thị của coin (e.g. "Bitcoin")
+        data_type: varchar
+        data_tests:
+          - not_null
+
+      - name: categories
+        description: JSON array — danh sách categories của coin trên CoinGecko
+        data_type: json
+
+      - name: description_en
+        description: Mô tả coin bằng tiếng Anh (extract từ JSON field description->>'en')
+        data_type: varchar
+
+      - name: homepage_url
+        description: URL trang chủ chính thức (phần tử đầu tiên của links.homepage)
+        data_type: varchar
+
+      - name: genesis_date
+        description: Ngày ra mắt coin (YYYY-MM-DD, null nếu không có thông tin)
+        data_type: varchar
+
+      - name: platforms
+        description: >
+          JSON object — map blockchain_name → contract_address.
+          Dynamic keys nên được giữ dạng JSON thô.
+        data_type: json
+
+      - name: market_cap_rank_static
+        description: Xếp hạng market cap tại thời điểm fetch metadata gần nhất
+        data_type: bigint
+
+      - name: metadata_last_updated
+        description: Thời điểm pipeline fetch metadata gần nhất (alias của fetched_at)
+        data_type: timestamp
+
+  # ───────────────────────────────────────────────────────────────────────────
+
+  - name: dim_time
+    description: >
+      Date dimension table sinh từ dbt_utils.date_spine.
+      Grain: 1 dòng = 1 ngày dương lịch.
+      Lưu ý: is_in_q1..q4 theo fiscal year (Q1 = Dec-Jan-Feb), không phải calendar quarter.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: date_id
+        description: Surrogate key dạng YYYYMMDD (e.g. 20260101), dùng làm FK trong fact tables
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: date
+        description: Ngày dương lịch (DATE type)
+        data_type: date
+        data_tests:
+          - not_null
+          - unique
+
+      - name: day_of_week
+        description: "Thứ trong tuần — extract(dow): 0 = Sunday, 6 = Saturday"
+        data_type: bigint
+
+      - name: week
+        description: Số tuần trong năm (ISO week)
+        data_type: bigint
+
+      - name: month
+        description: Tháng (1–12)
+        data_type: bigint
+
+      - name: quarter
+        description: Quý theo lịch dương (1–4)
+        data_type: bigint
+
+      - name: year
+        description: Năm dương lịch (e.g. 2026)
+        data_type: bigint
+
+      - name: day_of_month
+        description: Ngày trong tháng (1–31)
+        data_type: bigint
+
+      - name: week_of_year
+        description: Số tuần trong năm (ISO, giống week)
+        data_type: bigint
+
+      - name: is_weekend
+        description: "Binary flag: 1 nếu là thứ 7 hoặc chủ nhật, 0 nếu ngược lại"
+        data_type: integer
+
+      - name: is_in_q1
+        description: "Binary flag — Fiscal Q1: 1 nếu tháng 12, 1 hoặc 2"
+        data_type: integer
+
+      - name: is_in_q2
+        description: "Binary flag — Fiscal Q2: 1 nếu tháng 3, 4 hoặc 5"
+        data_type: integer
+
+      - name: is_in_q3
+        description: "Binary flag — Fiscal Q3: 1 nếu tháng 6, 7 hoặc 8"
+        data_type: integer
+
+      - name: is_in_q4
+        description: "Binary flag — Fiscal Q4: 1 nếu tháng 9, 10 hoặc 11"
+        data_type: integer
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # FACTS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: fct_market_snapshot_hourly
+    description: >
+      Fact table chứa snapshot giá và market data theo từng lần fetch của pipeline.
+      Grain: 1 dòng = 1 coin tại 1 lần fetch (coin_id, fetched_at).
+      Nguồn: int_coins_markets_dedup (đã dedup để xử lý trường hợp pipeline re-run).
+    config:
+      contract:
+        enforced: true
+      on_schema_change: fail
+    columns:
+      - name: snapshot_id
+        description: Surrogate key — hash(coin_id, fetched_at). Primary key của fact table.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: coin_id
+        description: CoinGecko coin ID — FK → dim_coin.coin_id
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_id
+
+      - name: snapshot_date_id
+        description: >
+          Date key dạng YYYYMMDD, tính inline bằng strftime(snapshot_date, '%Y%m%d').
+          Dùng để join với dim_time.date_id ở BI layer — không join trong SQL model.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_time')
+              field: date_id
+
+      - name: current_price
+        description: Giá hiện tại tính bằng USD tại thời điểm fetch
+        data_type: double
+        data_tests:
+          - not_null
+
+      - name: market_cap
+        description: Market capitalization (USD)
+        data_type: double
+
+      - name: total_volume
+        description: Tổng khối lượng giao dịch 24h rolling từ CoinGecko (USD)
+        data_type: double
+
+      - name: high_24h
+        description: Giá cao nhất trong 24h trước thời điểm fetch (USD)
+        data_type: double
+
+      - name: low_24h
+        description: Giá thấp nhất trong 24h trước thời điểm fetch (USD)
+        data_type: double
+
+      - name: price_change_24h
+        description: Sự thay đổi giá trong 24h trước thời điểm fetch (USD)
+        data_type: double
+
+      - name: price_change_percentage_24h
+        description: Phần trăm thay đổi giá trong 24h trước thời điểm fetch
+        data_type: double
+
+      - name: price_change_percentage_7d_in_currency
+        description: Phần trăm thay đổi giá trong 7 ngày trước thời điểm fetch
+        data_type: double
+
+      - name: market_cap_rank
+        description: Xếp hạng market cap tại thời điểm fetch
+        data_type: bigint
+
+      - name: api_last_updated
+        description: Timestamp cuối cùng CoinGecko cập nhật giá cho coin này
+        data_type: timestamp
+
+      - name: fetched_at
+        description: Thời điểm pipeline chạy và fetch data từ CoinGecko
+        data_type: timestamp
+        data_tests:
+          - not_null
+
+  # ───────────────────────────────────────────────────────────────────────────
+
+  - name: fct_market_snapshot_daily
+    description: >
+      Fact table OHLC (Open/High/Low/Close) theo ngày, aggregate từ fct_market_snapshot_hourly.
+      Grain: 1 dòng = 1 coin trong 1 ngày (coin_id, snapshot_date).
+      Open = giá đầu ngày, Close = giá cuối ngày, High/Low = max/min trong ngày.
+    config:
+      contract:
+        enforced: true
+      on_schema_change: fail
+    columns:
+      - name: snapshot_id
+        description: Surrogate key — hash(coin_id, snapshot_date). Primary key của fact table.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: coin_id
+        description: CoinGecko coin ID — FK → dim_coin.coin_id
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_id
+
+      - name: snapshot_date
+        description: Ngày snapshot (DATE type, cast từ fetched_at của hourly fact)
+        data_type: date
+        data_tests:
+          - not_null
+
+      - name: snapshot_date_id
+        description: Date key dạng YYYYMMDD — FK → dim_time.date_id. Dùng để join ở BI layer.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_time')
+              field: date_id
+
+      - name: open
+        description: Giá mở cửa — current_price tại snapshot đầu tiên trong ngày (rn_first = 1)
+        data_type: double
+
+      - name: high
+        description: Giá cao nhất — max(current_price) trong tất cả snapshots của ngày
+        data_type: double
+
+      - name: low
+        description: Giá thấp nhất — min(current_price) trong tất cả snapshots của ngày
+        data_type: double
+
+      - name: close
+        description: Giá đóng cửa — current_price tại snapshot cuối cùng trong ngày (rn_last = 1)
+        data_type: double
+
+      - name: volume_24h_rolling
+        description: >
+          Rolling 24h volume tại snapshot cuối ngày (close window, rn_last = 1).
+          CoinGecko total_volume là rolling 24h — lấy giá trị cuối ngày cho số liệu
+          cập nhật nhất, phù hợp chuẩn OHLCV thông thường.
+        data_type: double
+
+      - name: daily_return
+        description: Tỷ suất sinh lợi trong ngày — (close - open) / open. Null nếu open = 0.
+        data_type: double
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - snapshot_date

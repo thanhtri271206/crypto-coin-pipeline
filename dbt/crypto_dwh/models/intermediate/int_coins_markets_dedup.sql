@@ -19,6 +19,7 @@ select
     low_24h,
     price_change_24h,
     price_change_percentage_24h,
+    price_change_percentage_7d_in_currency,
     circulating_supply,
     total_supply,
     max_supply,
