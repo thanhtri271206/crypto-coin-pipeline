@@ -3,93 +3,162 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# Security & Credentials (MANDATORY)
+# 1. Security, Secrets & Environment Variables (CRITICAL)
 # ------------------------------------------------------------------------------
+# Environment variable files (any level)
 .env
 .env.*
+*.env
 !.env.example
 !.env.template
+!.env.sample
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Cryptographic keys, certificates, & credentials
 *.pem
 *.key
 *.p12
 *.pfx
+*.pkcs12
+*.cer
+*.crt
 credentials/
 secrets/
 service_account*.json
+google-credentials*.json
+*credential*.json
+*secret*.json
+id_rsa
+id_ed25519
+*.id_rsa
+*.id_ed25519
+auth_token*
+*.token
+token.json
 
 # ------------------------------------------------------------------------------
-# Python & Environment
+# 2. Data Engineering Storage, Warehouses & Data Lake (DuckDB, Parquet, SQLite)
+# ------------------------------------------------------------------------------
+# DuckDB files & runtime locks
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp
+warehouse/*.duckdb*
+dev.duckdb
+
+# General database files
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Data lake & raw/processed data dumps
+data/
+storage/
+local_data/
+raw_data/
+minio_data/
+minio-data/
+.minio.sys/
+*.parquet
+*.csv.gz
+
+# ------------------------------------------------------------------------------
+# 3. dbt (Data Build Tool)
+# ------------------------------------------------------------------------------
+target/
+**/target/
+dbt_packages/
+**/dbt_packages/
+dbt_modules/
+**/dbt_modules/
+profiles.yml
+**/profiles.yml
+.user.yml
+**/.user.yml
+dbt.log
+**/dbt.log
+
+# ------------------------------------------------------------------------------
+# 4. Apache Airflow & Orchestration
+# ------------------------------------------------------------------------------
+airflow.db
+airflow.cfg
+airflow-webserver.pid
+airflow-scheduler.pid
+airflow-worker.pid
+airflow-triggerer.pid
+standalone_admin_password.txt
+webserver_config.py
+
+# Docker Compose local overrides
+docker-compose.override.yml
+
+# ------------------------------------------------------------------------------
+# 5. Python Runtime & Environment (uv, venv, poetry)
 # ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
 
-# Virtual environments (uv, venv)
+# Virtual environments
 .venv/
 venv/
 env/
 ENV/
 .venv*/
+env.bak/
+venv.bak/
 
-# Testing & Linting cache
+# Build & packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing, typing & linting caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
 .nox/
 .tox/
 
-# Build & Packaging
-build/
-dist/
-*.egg-info/
-.eggs/
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
 
 # ------------------------------------------------------------------------------
-# Data Engineering & Storage (DuckDB, Parquet, Databases)
+# 6. Logs & Temporary Files
 # ------------------------------------------------------------------------------
-*.duckdb
-*.duckdb.wal
-*.duckdb.tmp
-warehouse/*.duckdb
-dev.duckdb
-*.db
-*.sqlite
-*.sqlite3
-
-# Data artifacts
-data/
-*.parquet
-
-# ------------------------------------------------------------------------------
-# dbt (Data Build Tool)
-# ------------------------------------------------------------------------------
-target/
-dbt_packages/
-dbt_modules/
 logs/
-profiles.yml
-
-# ------------------------------------------------------------------------------
-# Logs & Temporary Files
-# ------------------------------------------------------------------------------
+**/logs/
 *.log
 *.tmp
 tmp/
 temp/
 
 # ------------------------------------------------------------------------------
-# Docker & Orchestration
+# 7. IDE, Editor & OS Specific Files
 # ------------------------------------------------------------------------------
-airflow.db
-airflow-webserver.pid
-
-# ------------------------------------------------------------------------------
-# IDE & Operating System Files
-# ------------------------------------------------------------------------------
-# VS Code
+# Visual Studio Code
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -99,12 +168,21 @@ airflow-webserver.pid
 # JetBrains PyCharm / IntelliJ
 .idea/
 
-# OS specific files
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
+
+# Windows
 Thumbs.db
+ehthumbs.db
 desktop.ini
+
+# Linux
+*~

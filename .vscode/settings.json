@@ -1,3 +1,4 @@
 {
-    "terminal.integrated.cwd": "${workspaceFolder}"
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "dbt.perspectiveTheme": "Vintage"
 }
