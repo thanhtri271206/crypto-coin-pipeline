@@ -1,0 +1,150 @@
+version: 2
+
+models:
+  - name: market_health_mart
+    description: >
+      Mart chứa các KPI sức khỏe tổng thể của toàn thị trường crypto theo từng lần fetch.
+      Grain: 1 dòng = 1 lần fetch từ CoinGecko /global endpoint (mỗi giờ hoặc vài giờ).
+      Nguồn: int_market_share (join fct_global_market_snapshot + fct_market_snapshot_hourly).
+
+      Các chỉ số:
+      - total_market_cap_usd: Tổng vốn hóa toàn thị trường tính bằng USD.
+      - total_volume_usd: Tổng khối lượng giao dịch 24h toàn thị trường (USD).
+      - btc_dominance_pct / eth_dominance_pct: Thị phần BTC/ETH theo % market cap.
+        Đây là % dạng raw từ CoinGecko API (vd 52.3 = 52.3%), KHÔNG phải tỷ lệ [0,1].
+      - top10_market_cap_usd: Tổng market cap của top 10 coin trong pipeline.
+      - top10_market_share_pct: top10_market_cap / total_market_cap — tỷ lệ [0,1].
+      - market_cap_change_pct_24h: % thay đổi tổng market cap trong 24h (từ API).
+      - volume_change_pct_24h: % thay đổi tổng volume trong 24h (từ API, có thể null).
+
+    config:
+      contract:
+        enforced: true
+
+    columns:
+      - name: snapshot_id
+        description: >
+          Surrogate key — MD5 hash(fetched_at), inherited từ fct_global_market_snapshot.
+          Primary key của mart: 1 dòng / lần fetch global endpoint.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: fetched_at
+        description: Timestamp lần pipeline fetch /global endpoint (UTC).
+        data_type: timestamp
+        data_tests:
+          - not_null
+
+      - name: snapshot_date_id
+        description: >
+          Date key dạng YYYYMMDD — FK → dim_time.date_id.
+          Dùng để filter theo ngày ở BI/dashboard layer.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_time')
+              field: date_id
+
+      - name: total_market_cap_usd
+        description: >
+          Tổng market capitalization của toàn thị trường crypto tính bằng USD.
+          Luôn dương. Theo lịch sử, total market cap thường trong khoảng
+          $500B - $5T USD. Bound > 0 để phát hiện bad data (null hoặc âm).
+        data_type: double
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false    # Nghiêm ngặt: total_market_cap = 0 là dữ liệu lỗi
+
+      - name: total_volume_usd
+        description: >
+          Tổng khối lượng giao dịch 24h của toàn thị trường (USD).
+          Luôn >= 0. Có thể rất lớn (crypto market volume thường $50B-$500B/ngày).
+        data_type: double
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: btc_dominance_pct
+        description: >
+          Bitcoin dominance — thị phần market cap của BTC so với toàn thị trường.
+          Đơn vị: % raw từ CoinGecko (vd 52.3 nghĩa là 52.3%, KHÔNG phải 0.523).
+          Theo lịch sử dao động trong khoảng 30% - 75%. Bound [10, 90] để phát hiện
+          giá trị bất thường (BTC dominance không thể > 90% hoặc < 10% trong thực tế).
+        data_type: double
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 10
+              max_value: 90
+
+      - name: eth_dominance_pct
+        description: >
+          Ethereum dominance — thị phần market cap của ETH so với toàn thị trường.
+          Đơn vị: % raw từ CoinGecko (vd 14.1 nghĩa là 14.1%).
+          Theo lịch sử dao động trong khoảng 5% - 35%.
+        data_type: double
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 2
+              max_value: 40
+
+      - name: top10_market_cap_usd
+        description: >
+          Tổng market cap của top 10 coin đang được track trong pipeline (USD).
+          NULL nếu chưa có data hourly snapshot trùng với thời điểm global fetch
+          (xảy ra khi 2 pipeline lệch giờ và chưa có data trong window).
+          Luôn <= total_market_cap_usd nếu có giá trị.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: top10_market_cap_usd is not null
+
+      - name: top10_market_share_pct
+        description: >
+          Tỷ lệ thị phần của top 10 coin: top10_market_cap / total_market_cap.
+          Đơn vị: tỷ lệ [0, 1] (KHÔNG phải %, khác với btc_dominance_pct).
+          NULL nếu top10_market_cap_usd NULL.
+          Trong thực tế, top 10 coin chiếm khoảng 70-90% tổng thị trường.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+              config:
+                where: top10_market_share_pct is not null
+
+      - name: market_cap_change_pct_24h
+        description: >
+          % thay đổi tổng market cap so với 24h trước, từ CoinGecko API.
+          Đơn vị: % raw (vd -3.5 nghĩa là giảm 3.5%).
+          Trong điều kiện thị trường bình thường: dao động -20% đến +20%.
+          Crash lớn nhất trong lịch sử (~-50%/ngày) là ngoại lệ cực hiếm.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -60
+              max_value: 60
+              config:
+                where: market_cap_change_pct_24h is not null
+
+      - name: volume_change_pct_24h
+        description: >
+          % thay đổi tổng volume 24h so với ngày trước, từ CoinGecko API.
+          Có thể null (field này đôi khi không có trong API response cũ).
+          Volume có thể biến động mạnh hơn market cap — bound [-90, 500].
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -90
+              max_value: 500
+              config:
+                where: volume_change_pct_24h is not null

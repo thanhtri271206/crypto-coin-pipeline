@@ -1,0 +1,160 @@
+version: 2
+
+models:
+  - name: coin_performance_mart
+    description: >
+      Mart chứa các chỉ số hiệu suất kỹ thuật của từng coin theo ngày.
+      Grain: 1 dòng = 1 coin × 1 ngày (coin_id, snapshot_date).
+      Nguồn: int_coin_rolling_metrics (tính từ fct_market_snapshot_daily).
+
+      Lưu ý về cold-start (NULL trong N ngày đầu):
+      - rolling_return_7d: NULL trong 7 ngày đầu (chưa đủ lịch sử).
+      - rolling_return_30d: NULL trong 30 ngày đầu.
+      - rolling_return_90d: NULL trong 90 ngày đầu.
+      - volatility_7d/30d: NULL khi cửa sổ chưa đủ 2 điểm dữ liệu.
+      - max_drawdown_30d: NULL trong 29 ngày đầu.
+      - drawdown_pct: Có giá trị từ ngày đầu tiên (= 0 khi coin ở đỉnh, < 0 khi dưới đỉnh).
+
+      Lưu ý quan trọng — "pipeline-start peak":
+      drawdown_pct và max_drawdown_30d tính peak từ ngày đầu pipeline chạy,
+      KHÔNG phải ATH lịch sử toàn thời gian của coin. Dashboard cần hiển thị
+      disclaimer này để tránh nhầm lẫn với ATH thực tế.
+
+    config:
+      contract:
+        enforced: true
+
+    columns:
+      - name: performance_id
+        description: >
+          Surrogate key — MD5 hash(coin_id, snapshot_date).
+          Primary key của mart, duy nhất 1 dòng / coin / ngày.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - unique
+
+      - name: coin_id
+        description: CoinGecko coin ID (vd "bitcoin") — FK → dim_coin.coin_id
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_id
+
+      - name: snapshot_date
+        description: Ngày snapshot (DATE type), inherited từ fct_market_snapshot_daily.
+        data_type: date
+        data_tests:
+          - not_null
+
+      - name: snapshot_date_id
+        description: >
+          Date key dạng YYYYMMDD — FK → dim_time.date_id.
+          Dùng để join với dim_time ở BI/dashboard layer, không join trong SQL model.
+        data_type: varchar
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_time')
+              field: date_id
+
+      - name: rolling_return_7d
+        description: >
+          Tỷ suất sinh lợi 7 ngày: (close_today - close_7d_ago) / close_7d_ago.
+          NULL nếu không có data ngày T-7 (đầu pipeline hoặc gap dữ liệu).
+          Dương = tăng giá, Âm = giảm giá.
+          Lý do bound [-1, 50]: coin không thể mất hơn 100%; return > 5000%
+          trong 7 ngày là outlier cực đoan chỉ có thể xảy ra với micro-cap coins.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 50
+              config:
+                where: rolling_return_7d is not null
+
+      - name: rolling_return_30d
+        description: >
+          Tỷ suất sinh lợi 30 ngày: (close_today - close_30d_ago) / close_30d_ago.
+          NULL nếu không có data ngày T-30.
+          Bound [-1, 100]: return > 10000% trong 30 ngày là outlier.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 100
+              config:
+                where: rolling_return_30d is not null
+
+      - name: rolling_return_90d
+        description: >
+          Tỷ suất sinh lợi 90 ngày: (close_today - close_90d_ago) / close_90d_ago.
+          NULL nếu không có data ngày T-90.
+          Bound [-1, 200]: return > 20000% trong 90 ngày là outlier.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 200
+              config:
+                where: rolling_return_90d is not null
+
+      - name: volatility_7d
+        description: >
+          Độ lệch chuẩn mẫu (stddev_samp) của daily_return trong cửa sổ 7 ngày
+          (6 ngày preceding + current row). Về mặt toán học luôn >= 0.
+          NULL khi cửa sổ < 2 điểm (stddev_samp cần tối thiểu 2 giá trị).
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: volatility_7d is not null
+
+      - name: volatility_30d
+        description: >
+          Độ lệch chuẩn mẫu (stddev_samp) của daily_return trong cửa sổ 30 ngày.
+          Về mặt toán học luôn >= 0.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: volatility_30d is not null
+
+      - name: drawdown_pct
+        description: >
+          Độ sụt giảm từ đỉnh pipeline: (close - pipeline_start_peak) / pipeline_start_peak.
+          Luôn <= 0 (coin không thể cao hơn peak của chính nó).
+          = 0.0 khi coin đang ở mức giá cao nhất kể từ đầu pipeline.
+          Càng âm = coin càng xa đỉnh (vd -0.3 = đang dưới đỉnh 30%).
+          Không thể < -1 vì giá không âm.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 0
+              config:
+                where: drawdown_pct is not null
+
+      - name: max_drawdown_30d
+        description: >
+          Drawdown tệ nhất (min) trong 30 ngày gần nhất (cửa sổ 29 preceding + current row).
+          Luôn <= drawdown_pct vì là min trong window.
+          NULL trong 29 ngày đầu khi chưa đủ 30 ngày data.
+          Dùng để đánh giá mức độ rủi ro tối đa trong tháng gần nhất.
+        data_type: double
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 0
+              config:
+                where: max_drawdown_30d is not null
+
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - snapshot_date

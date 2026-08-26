@@ -1,0 +1,167 @@
+version: 2
+
+models:
+  - name: top_movers_mart
+    description: >
+      Mart chứa snapshot "real-time" nhất của từng coin, phục vụ bảng Top Gainers/Losers
+      và phát hiện volume spike trên dashboard.
+      Grain: 1 dòng = 1 coin (snapshot mới nhất — fetched_at cao nhất).
+
+      DEPENDENCY GRAPH (lineage):
+        raw S3 (coins/markets/*.json)
+          → stg_coins_markets           [staging: rename, cast, parse fetched_at]
+          → int_coins_markets_dedup     [dedup theo (coin_id, fetched_at)]
+          → fct_market_snapshot_hourly  [incremental fact table]
+          ├── int_coin_rank_change      [lag(rank) per coin — derived từ hourly fact]
+          ├── fct_market_snapshot_daily [OHLCV aggregate daily từ hourly]
+          │     └── int_coin_volume_rolling_avg [avg_volume T-1 window]
+          └── top_movers_mart ← (join cả 3 nguồn trên)
+
+      Lý do mart tham chiếu cả intermediate lẫn core fact:
+        int_coin_rank_change và int_coin_volume_rolling_avg là "derived intermediate"
+        — chúng tính toán metric cần hourly hoặc daily fact làm input. Pattern này
+        chấp nhận được trong dbt: intermediate layer KHÔNG chỉ là dedup/rename,
+        mà còn bao gồm các business computation phục vụ nhiều mart.
+
+      Logic chính:
+      - latest_snapshot: 1 bản ghi / coin — fetched_at cao nhất (QUALIFY rn=1).
+      - rank_change: previous_rank - current_rank. NULL tại lần fetch đầu tiên.
+        Dương = tăng hạng (số nhỏ hơn = tốt hơn), Âm = tụt hạng.
+      - avg_volume_7d: baseline T-1 (ngày hôm qua) để không bị ảnh hưởng bởi
+        volume chưa đầy của ngày hiện tại. NULL trong ngày đầu pipeline.
+      - volume_spike_ratio: total_volume / avg_volume_7d (NULL nếu baseline NULL).
+
+      fetched_at vs snapshot_date:
+        fetched_at = timestamp pipeline gọi API — indicator "data tươi đến mức nào"
+                     (hiển thị dạng "updated 2 minutes ago" trên dashboard).
+        snapshot_date = date(fetched_at) — dùng cho date picker / time-range filter.
+        Không cần processed_at (khi dbt build xong): user quan tâm đến khi nào
+        data được FETCH từ API, không phải khi nào ETL job chạy xong.
+
+    columns:
+      - name: coin_id
+        description: >
+          CoinGecko coin ID (vd "bitcoin") — Primary key của mart vì chỉ có
+          1 dòng / coin (snapshot mới nhất).
+        data_tests:
+          - not_null
+          - unique
+          - relationships:
+              to: ref('dim_coin')
+              field: coin_id
+
+      - name: fetched_at
+        description: >
+          Timestamp của snapshot mới nhất từ fct_market_snapshot_hourly.
+          Đây là thời điểm pipeline chạy gần nhất, phản ánh trạng thái
+          "real-time" nhất có thể.
+        data_tests:
+          - not_null
+
+      - name: snapshot_date
+        description: >
+          date(fetched_at) — ngày của snapshot mới nhất.
+          Dùng cho date picker / time-range filter trên dashboard.
+          Khác với fetched_at (timestamp giờ:phút), snapshot_date chỉ giữ ngày.
+        data_tests:
+          - not_null
+
+      - name: current_price
+        description: >
+          Giá hiện tại (USD) tại thời điểm fetch mới nhất.
+          Luôn dương — giá coin không thể âm.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false    # Giá = 0 là bad data
+
+      - name: price_change_percentage_24h
+        description: >
+          % thay đổi giá trong 24h rolling từ CoinGecko API.
+          Đây là 24h ROLLING từ API (không phải open/close trong ngày calendar).
+          Đơn vị: % raw (vd -5.2 nghĩa là giảm 5.2%).
+          Trong điều kiện thường: -50% đến +100%. Bound [-100, 500] để
+          phát hiện bad data trong khi vẫn cho phép pump cực đoan.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -100
+              max_value: 500
+              config:
+                where: price_change_percentage_24h is not null
+
+      - name: price_change_percentage_7d_in_currency
+        description: >
+          % thay đổi giá trong 7 ngày rolling từ CoinGecko API.
+          Có thể null nếu không có đủ lịch sử 7 ngày từ API.
+          Bound [-100, 2000] — pump lớn hơn 7 ngày so với 24h.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -100
+              max_value: 2000
+              config:
+                where: price_change_percentage_7d_in_currency is not null
+
+      - name: market_cap_rank
+        description: >
+          Thứ hạng vốn hóa của coin tại thời điểm fetch mới nhất.
+          Số nhỏ = xếp hạng cao hơn (1 = lớn nhất). Luôn dương.
+          Pipeline track top 10 coin nên market_cap_rank thường trong [1, 20]
+          (có thể > 10 nếu coin tụt hạng sau khi được thêm vào tracking list).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+
+      - name: rank_change
+        description: >
+          Thay đổi thứ hạng so với lần fetch liền trước:
+          rank_change = previous_rank - current_rank.
+          Dương (vd +2): coin TĂNG hạng (số rank nhỏ hơn = tốt hơn).
+          Âm (vd -3): coin TỤT hạng.
+          0: không thay đổi thứ hạng.
+          NULL tại lần fetch đầu tiên của mỗi coin (không có previous_rank).
+          Bound [-20, 20]: không hợp lý nếu rank thay đổi > 20 bậc trong 1 giờ.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -20
+              max_value: 20
+              config:
+                where: rank_change is not null
+
+      - name: total_volume
+        description: >
+          Tổng khối lượng giao dịch 24h rolling của coin (USD), từ API.
+          Luôn >= 0. Top 10 coin thường có volume $100M - $50B/ngày.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: total_volume is not null
+
+      - name: avg_volume_7d
+        description: >
+          Volume trung bình 7 ngày của ngày HÔM QUA (T-1), tính từ fct_market_snapshot_daily.
+          Dùng rows between 7 preceding and 1 preceding → không tính ngày hôm nay,
+          đảm bảo baseline không bị ảnh hưởng bởi volume của ngày hiện tại.
+          NULL trong ngày đầu tiên pipeline chạy (chưa có ngày T-1).
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: avg_volume_7d is not null
+
+      - name: volume_spike_ratio
+        description: >
+          Tỷ lệ volume hiện tại so với trung bình 7 ngày: total_volume / avg_volume_7d.
+          > 1.0 = volume cao hơn bình thường (có thể là tín hiệu tăng/giảm đột biến).
+          < 1.0 = volume thấp hơn bình thường (thị trường ít hoạt động).
+          = NULL nếu avg_volume_7d NULL (ngày đầu pipeline).
+          Bound [0, 50]: volume spike > 50x trung bình là outlier cực đoan
+          (nếu xảy ra có thể là data lỗi từ API).
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 50
+              config:
+                where: volume_spike_ratio is not null
