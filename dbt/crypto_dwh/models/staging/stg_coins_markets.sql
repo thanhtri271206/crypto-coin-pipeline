@@ -15,6 +15,7 @@ renamed as(
         cast(low_24h as double) as low_24h,
         cast(price_change_24h as double) as price_change_24h,
         cast(price_change_percentage_24h as double) as price_change_percentage_24h,
+        price_change_percentage_7d_in_currency,
         cast(circulating_supply as double) as circulating_supply,
         cast(total_supply as double) as total_supply,
         cast(max_supply as double) as max_supply,

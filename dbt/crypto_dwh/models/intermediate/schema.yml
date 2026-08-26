@@ -1,25 +1,37 @@
-version: 2
+﻿version: 2
 
 models:
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DEDUP MODELS — xu ly idempotency khi pipeline re-run
+  # ─────────────────────────────────────────────────────────────────────────────
+
   - name: int_market_snapshot_dedup
     description: >
-      Dedup stg_market_chart theo (coin_id, ts_ms): giữ bản ghi có fetched_at mới nhất
-      để xử lý trường hợp pipeline chạy lại nhiều lần trong cùng khung giờ.
-      Grain: 1 dòng = 1 coin tại 1 mốc thời gian time-series (ts_ms).
+      Dedup stg_market_chart theo (coin_id, ts_ms): giu ban ghi co fetched_at moi nhat
+      de xu ly truong hop pipeline chay lai nhieu lan trong cung khung gio.
+      Grain: 1 dong = 1 coin tai 1 moc thoi gian time-series (ts_ms).
     columns:
       - name: coin_id
-        description: CoinGecko coin ID
+        description: CoinGecko coin ID (vd "bitcoin")
         data_tests:
           - not_null
       - name: ts_ms
-        description: Timestamp của điểm time-series (milliseconds epoch)
+        description: >
+          Timestamp cua diem time-series tu CoinGecko market_chart (milliseconds epoch).
+          CoinGecko tra ve daily granularity khi days > 90, hourly khi days <= 90.
         data_tests:
           - not_null
       - name: price_usd
-        description: Giá USD tại mốc ts_ms
+        description: Gia USD tai moc ts_ms
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+              config:
+                where: price_usd is not null
       - name: fetched_at
-        description: Thời điểm pipeline fetch (dùng để chọn bản ghi mới nhất khi dedup)
+        description: Thoi diem pipeline fetch (dung de chon ban ghi moi nhat khi dedup)
         data_tests:
           - not_null
     data_tests:
@@ -28,51 +40,378 @@ models:
             - coin_id
             - ts_ms
 
+  # ─────────────────────────────────────────────────────────────────────────────
+
   - name: int_coins_markets_dedup
     description: >
-      Dedup stg_coins_markets theo (coin_id, fetched_at): giữ bản ghi mới nhất
-      để xử lý trường hợp pipeline chạy lại nhiều lần trong cùng khung giờ.
-      Grain: 1 dòng = 1 coin tại 1 lần fetch (coin_id, fetched_at).
+      Dedup stg_coins_markets theo (coin_id, fetched_at): giu ban ghi moi nhat
+      de xu ly truong hop pipeline chay lai nhieu lan trong cung khung gio.
+      Grain: 1 dong = 1 coin tai 1 lan fetch (coin_id, fetched_at).
     columns:
       - name: coin_id
         description: CoinGecko coin ID
         data_tests:
           - not_null
       - name: fetched_at
-        description: Thời điểm pipeline fetch (parse từ tên file S3)
+        description: Thoi diem pipeline fetch (parse tu ten file S3)
         data_tests:
           - not_null
       - name: current_price
-        description: Giá hiện tại (USD)
+        description: Gia hien tai (USD) - bat buoc co gia tri hop le sau khi staging
         data_tests:
           - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+      - name: market_cap_rank
+        description: Xep hang market cap - luon duong neu khong null
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              config:
+                where: market_cap_rank is not null
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - coin_id
             - fetched_at
 
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: int_global_market_dedup
+    description: >
+      Dedup stg_global theo fetched_at: giu ban ghi moi nhat cho moi lan fetch
+      endpoint /global. Xu ly truong hop pipeline chay lai trong cung khung gio.
+      Grain: 1 dong = 1 lan fetch /global (fetched_at duy nhat).
+      Nguon truc tiep cho fct_global_market_snapshot.
+    columns:
+      - name: fetched_at
+        description: Timestamp lan pipeline fetch /global (UTC) - unique sau dedup
+        data_tests:
+          - not_null
+          - unique
+      - name: total_market_cap_usd
+        description: >
+          Tong market cap toan thi truong (USD). Luon duong.
+          La key metric cua global health - khong duoc null.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+      - name: total_volume_usd
+        description: Tong volume 24h toan thi truong (USD). Luon >= 0.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: btc_dominance_pct
+        description: >
+          BTC dominance - % raw tu CoinGecko (vd 52.3 = 52.3%).
+          Lich su dao dong trong [30, 75]. Bound [10, 90] de phat hien bad data.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 10
+              max_value: 90
+      - name: eth_dominance_pct
+        description: ETH dominance - % raw tu CoinGecko. Dao dong lich su [5, 35].
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 2
+              max_value: 40
+      - name: market_cap_change_pct_24h
+        description: >
+          % thay doi total market cap trong 24h, tu API.
+          Bound [-60, 60]: crash lon nhat lich su ~-50%/ngay.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -60
+              max_value: 60
+              config:
+                where: market_cap_change_pct_24h is not null
+
+  # ─────────────────────────────────────────────────────────────────────────────
+
   - name: int_coin_metadata_latest
     description: >
-      Dedup stg_coin_metadata theo coin_id: giữ bản ghi có api_last_updated mới nhất.
-      Đây là nguồn duy nhất cho dim_coin — mọi enrichment hay validation
-      nên được thêm vào đây trước khi đến mart layer.
-      Grain: 1 dòng = 1 coin (bản ghi metadata mới nhất).
+      Dedup stg_coin_metadata theo coin_id: giu ban ghi co api_last_updated moi nhat.
+      Day la nguon duy nhat cho dim_coin - moi enrichment hay validation
+      nen duoc them vao day truoc khi den mart layer.
+      Grain: 1 dong = 1 coin (ban ghi metadata moi nhat).
+    columns:
+      - name: coin_id
+        description: CoinGecko coin ID - unique sau dedup
+        data_tests:
+          - not_null
+          - unique
+      - name: symbol
+        description: Ticker symbol viet thuong (vd "btc", "eth")
+        data_tests:
+          - not_null
+      - name: name
+        description: Ten hien thi cua coin (vd "Bitcoin")
+        data_tests:
+          - not_null
+      - name: fetched_at
+        description: Thoi diem pipeline fetch metadata gan nhat
+        data_tests:
+          - not_null
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # DERIVED / COMPUTED MODELS
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: int_coin_rank_change
+    description: >
+      Tinh thay doi thu hang market cap cua tung coin giua cac lan fetch lien tiep.
+      Grain: 1 dong = 1 coin x 1 lan fetch (coin_id, fetched_at).
+      Nguon: fct_market_snapshot_hourly.
+
+      Logic: rank_change = lag(market_cap_rank) - market_cap_rank
+      Duong (+): coin TANG hang (so rank nho hon = xep hang tot hon).
+      Am (-): coin TUT hang. NULL: lan fetch dau tien (khong co previous_rank).
+
+      Luu y: model nay ref nguoc len mart layer (fct_market_snapshot_hourly),
+      day la pattern chap nhan duoc khi intermediate model can tinh derived
+      metrics tu mot mart da cleaned/deduped.
     columns:
       - name: coin_id
         description: CoinGecko coin ID
         data_tests:
           - not_null
-          - unique
-      - name: symbol
-        description: Ticker symbol viết thường
-        data_tests:
-          - not_null
-      - name: name
-        description: Tên hiển thị của coin
-        data_tests:
-          - not_null
       - name: fetched_at
-        description: Thời điểm pipeline fetch metadata gần nhất
+        description: Timestamp lan fetch tuong ung
         data_tests:
           - not_null
+      - name: market_cap_rank
+        description: Thu hang market cap tai lan fetch nay (so nho = tot hon)
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              config:
+                where: market_cap_rank is not null
+      - name: previous_rank
+        description: Thu hang tai lan fetch lien truoc (lag). NULL cho lan fetch dau tien.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 1
+              config:
+                where: previous_rank is not null
+      - name: rank_change
+        description: >
+          rank_change = previous_rank - current_rank.
+          Duong = tang hang, Am = tut hang, 0 = khong doi, NULL = lan dau.
+          Bound [-20, 20]: top 10 coin khong the nhay > 20 bac trong 1 gio.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -20
+              max_value: 20
+              config:
+                where: rank_change is not null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - fetched_at
+
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: int_coin_volume_rolling_avg
+    description: >
+      Tinh trung binh volume 7 ngay (khong bao gom ngay hom nay) cho tung coin.
+      Grain: 1 dong = 1 coin x 1 ngay (coin_id, snapshot_date).
+      Nguon: fct_market_snapshot_daily.
+
+      Window: rows between 7 preceding and 1 preceding
+      KHONG tinh ngay hien tai vao baseline, dam bao avg_volume_7d
+      la "baseline hom qua" khi so sanh voi volume hom nay trong top_movers_mart.
+      NULL trong ngay dau tien (khong co ngay preceding nao).
+    columns:
+      - name: coin_id
+        description: CoinGecko coin ID
+        data_tests:
+          - not_null
+      - name: snapshot_date
+        description: Ngay snapshot (DATE type)
+        data_tests:
+          - not_null
+      - name: volume_24h_rolling
+        description: Volume 24h rolling tai ngay nay (tu fct_market_snapshot_daily). Luon >= 0.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: volume_24h_rolling is not null
+      - name: avg_volume_7d
+        description: >
+          Trung binh volume cua 7 ngay truoc ngay hien tai (rows 1-7 preceding).
+          NULL trong ngay dau tien khi chua co ngay preceding. Luon >= 0 khi co gia tri.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: avg_volume_7d is not null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - snapshot_date
+
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: int_coin_rolling_metrics
+    description: >
+      Tinh cac chi so ky thuat rolling cho tung coin theo ngay.
+      Grain: 1 dong = 1 coin x 1 ngay (coin_id, snapshot_date).
+      Materialized: TABLE (override global view default) vi window functions chay tren
+      3 self-joins + 2 window frames + drawdown - ton kem neu la view.
+      Nguon: fct_market_snapshot_daily.
+
+      Metrics duoc tinh:
+      - rolling_return_7/30/90d: point-to-point return (close hom nay / close N ngay truoc - 1).
+        NULL neu khong co data ngay T-N (cold-start hoac gap).
+      - volatility_7/30d: stddev_samp(daily_return) tren rolling window.
+        NULL khi < 2 diem trong cua so.
+      - drawdown_pct: (close - pipeline_start_peak) / pipeline_start_peak. Luon <= 0.
+        "Pipeline-start peak" - KHONG phai ATH lich su toan thoi gian cua coin.
+      - max_drawdown_30d: min(drawdown_pct) trong 30 ngay rolling. Luon <= 0.
+    columns:
+      - name: coin_id
+        description: CoinGecko coin ID
+        data_tests:
+          - not_null
+      - name: snapshot_date
+        description: Ngay snapshot
+        data_tests:
+          - not_null
+      - name: rolling_return_7d
+        description: "(close_today - close_7d_ago) / close_7d_ago. NULL neu khong co T-7. Bound [-1, 50]."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 50
+              config:
+                where: rolling_return_7d is not null
+      - name: rolling_return_30d
+        description: "(close_today - close_30d_ago) / close_30d_ago. NULL neu khong co T-30. Bound [-1, 100]."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 100
+              config:
+                where: rolling_return_30d is not null
+      - name: rolling_return_90d
+        description: "(close_today - close_90d_ago) / close_90d_ago. NULL neu khong co T-90. Bound [-1, 200]."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 200
+              config:
+                where: rolling_return_90d is not null
+      - name: volatility_7d
+        description: "stddev_samp(daily_return) trong 7 ngay. Luon >= 0. NULL khi < 2 diem."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: volatility_7d is not null
+      - name: volatility_30d
+        description: "stddev_samp(daily_return) trong 30 ngay. Luon >= 0."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: volatility_30d is not null
+      - name: drawdown_pct
+        description: "(close - pipeline_start_peak) / pipeline_start_peak. Luon trong [-1, 0]."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 0
+              config:
+                where: drawdown_pct is not null
+      - name: max_drawdown_30d
+        description: "min(drawdown_pct) trong 30 ngay rolling. Luon trong [-1, 0]. NULL trong 29 ngay dau."
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 0
+              config:
+                where: max_drawdown_30d is not null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - snapshot_date
+
+  # ─────────────────────────────────────────────────────────────────────────────
+
+  - name: int_market_share
+    description: >
+      Join fct_global_market_snapshot voi top10 market cap tong hop tu
+      fct_market_snapshot_hourly de tinh ty le market share cua top 10 coin.
+      Grain: 1 dong = 1 lan fetch /global (fetched_at tu global snapshot).
+      Join theo snapshot_hour (date_trunc('hour', fetched_at)).
+
+      top10_market_cap_usd va top10_market_share_pct co the NULL neu khong co
+      coin snapshot trong cung snapshot_hour voi global snapshot (left join).
+    columns:
+      - name: snapshot_id
+        description: Surrogate key tu fct_global_market_snapshot - unique moi lan fetch /global.
+        data_tests:
+          - not_null
+          - unique
+      - name: fetched_at
+        description: Timestamp lan fetch /global (UTC)
+        data_tests:
+          - not_null
+      - name: total_market_cap_usd
+        description: Tong market cap toan thi truong (USD). Luon > 0.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+      - name: total_volume_usd
+        description: Tong volume 24h toan thi truong (USD). Luon >= 0.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: btc_dominance_pct
+        description: "BTC dominance % raw tu CoinGecko. Lich su [30, 75]. Bound [10, 90]."
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 10
+              max_value: 90
+      - name: eth_dominance_pct
+        description: "ETH dominance % raw tu CoinGecko. Lich su [5, 35]. Bound [2, 40]."
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 2
+              max_value: 40
+      - name: top10_market_cap_usd
+        description: >
+          Tong market cap top 10 coin trong pipeline (USD).
+          NULL neu khong co coin snapshot trong cung snapshot_hour.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+              config:
+                where: top10_market_cap_usd is not null
+      - name: top10_market_share_pct
+        description: >
+          top10_market_cap_usd / total_market_cap_usd. Ti le [0, 1].
+          KHONG phai % raw (khac voi btc_dominance_pct).
+          NULL neu top10_market_cap_usd NULL.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+              config:
+                where: top10_market_share_pct is not null
