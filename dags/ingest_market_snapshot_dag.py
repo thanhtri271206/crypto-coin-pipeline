@@ -6,6 +6,7 @@ import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
+from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
 from ingestion import schemas
 from ingestion.coingecko_client import CoinGeckoClient
 from ingestion.config import COIN_IDS_STR
@@ -92,6 +93,12 @@ with DAG(
         CoinGeckoClient.validate_global_market_data(raw_data)
         return {"s3_key": s3_key, "status": "valid"}
 
+    trigger_transform=TriggerDagRunOperator(
+        task_id="trigger_transform",
+        trigger_dag_id="transform_dag",
+        wait_for_completion=False
+    )
+
     # Flow 1: coins/markets (fetch -> upload -> validate)
     markets_data = fetch_markets_raw()
     markets_s3_key = upload_markets_to_s3(raw_data=markets_data)
@@ -102,3 +109,4 @@ with DAG(
     global_s3_key = upload_global_to_s3(raw_data=global_data)
     validate_global_data(s3_key=global_s3_key)
 
+    [markets_s3_key, global_s3_key] >> trigger_transform
