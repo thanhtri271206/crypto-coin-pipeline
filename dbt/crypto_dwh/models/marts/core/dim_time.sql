@@ -1,11 +1,11 @@
 with date_bounds as (
     select
         coalesce(
-            min(cast(fetched_at as date)),
+            min(cast(to_timestamp(ts_ms / 1000) as date)),
             cast('2020-01-01' as date)
         ) as start_date,
         cast(current_date + interval 30 day as date) as end_date
-    from {{ ref('fct_market_snapshot_hourly') }}
+    from {{ ref('int_market_snapshot_dedup') }}
 ),
 
 spine as (
