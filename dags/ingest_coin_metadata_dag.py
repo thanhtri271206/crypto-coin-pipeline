@@ -20,7 +20,7 @@ with DAG(
     dag_id="ingest_coin_metadata",
     description="Ingest coin metadata for all coins listed on CoinGecko — weekly cadence",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,  # "@weekly",
+    schedule="@weekly",
     catchup=False,
     # max_active_tasks=10 (thay vì 3) để tránh task starvation:
     # 10 coins × 3 tasks (fetch/upload/validate) = 30 tasks tranh 3 slot

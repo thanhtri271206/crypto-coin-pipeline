@@ -21,7 +21,7 @@ with DAG(
     dag_id="ingest_market_snapshot",
     description="Ingest coins/markets (Top 10) + global market data — cùng hourly cadence",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,  # "@hourly",
+    schedule="@hourly",
     catchup=False,
     tags=["ingestion", "phase-1"],
 ):

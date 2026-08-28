@@ -21,7 +21,7 @@ with DAG(
     dag_id="market_chart_incremental",
     description="Incremental daily fetch for market chart data (days=7) for all coins.",
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
-    schedule=None,  # = "@daily",  # Chạy định kỳ mỗi ngày 1 lần
+    schedule="@daily",  # Chạy định kỳ mỗi ngày 1 lần
     catchup=False,
     max_active_tasks=10,  # 1 slot/coin, tránh task starvation khi 30 tasks tranh slot
     tags=["ingestion", "phase-1"],
