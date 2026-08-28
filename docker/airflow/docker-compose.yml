@@ -10,6 +10,7 @@ x-airflow-common:
   build: .
   env_file:
     - ${ENV_FILE_PATH:-../../.env}
+    - .env
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
@@ -32,7 +33,6 @@ x-airflow-common:
     # chạy trong Docker container vs khi chạy trực tiếp trên máy host
     # (pytest, script local) — 2 context này cần 2 giá trị S3_ENDPOINT_URL
     # khác nhau.
-    S3_ENDPOINT_URL: 'http://minio:9000'
     PYTHONPATH: '/opt/airflow'
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
