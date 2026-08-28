@@ -145,19 +145,25 @@ st.markdown("---")
 # ─── Section 1: Price Chart ───────────────────────────────────────────────
 st.subheader("💰 Price History")
 
-use_hourly_view = df_hourly.shape[0] >= 2
-use_daily_view  = df_daily.shape[0] >= 1
-
-if use_hourly_view:
-    fig_price = charts.price_line(df_hourly, selected_coin, use_hourly=True)
-    st.plotly_chart(fig_price, use_container_width=True, key=f"price_{selected_coin}")
-    st.caption(f"Granularity: hourly snapshots ({df_hourly.shape[0]} data points)")
-elif use_daily_view:
+# Long-term daily chart — luôn ưu tiên hiện nếu có data (366 ngày backfill)
+if df_daily.shape[0] >= 1:
     fig_price = charts.price_line(df_daily, selected_coin, use_hourly=False)
     st.plotly_chart(fig_price, use_container_width=True, key=f"price_daily_{selected_coin}")
-    st.caption(f"Granularity: daily close ({df_daily.shape[0]} ngày)")
+    st.caption(
+        f"Granularity: daily close ({df_daily.shape[0]} ngày)"
+    )
 else:
     st.info(f"📊 Chưa có price data cho {coin_label}")
+
+# Intraday hourly chart — chỉ hiện khi pipeline đã chạy đủ lâu để có nhiều ngày hourly
+if df_hourly.shape[0] >= 2:
+    with st.expander(f"🔍 Intraday View — Hourly Snapshots ({df_hourly.shape[0]} points)", expanded=False):
+        fig_hourly = charts.price_line(df_hourly, selected_coin, use_hourly=True)
+        st.plotly_chart(fig_hourly, use_container_width=True, key=f"price_hourly_{selected_coin}")
+        st.caption(
+            "Granularity: hourly snapshots từ pipeline. "
+            "Khi pipeline chạy lâu hơn, chart này sẽ cover nhiều ngày hơn."
+        )
 
 # ─── Section 2: Daily Return ──────────────────────────────────────────────
 st.markdown("---")
@@ -248,7 +254,7 @@ st.subheader("📉 Drawdown from Peak")
 st.warning(
     "⚠️ **Disclaimer bắt buộc**: Drawdown ở đây được tính từ **đỉnh giá kể từ ngày pipeline bắt đầu chạy**, "
     "**KHÔNG PHẢI** All-Time High (ATH) lịch sử của coin. "
-    "Ví dụ: Bitcoin ATH lịch sử ~$109K nhưng pipeline bắt đầu tại ~$64K → drawdown hiện tại từ $64K."
+    r"Ví dụ: Bitcoin ATH lịch sử ~\$109K nhưng pipeline bắt đầu tại ~\$64K → drawdown hiện tại từ \$64K."
 )
 
 if not df_perf.empty:
