@@ -16,16 +16,17 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-import streamlit as st
+from datetime import UTC, datetime
+
 import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 
-from app.queries import get_market_health_history, get_market_overview, get_top_movers
 from app import charts, theme
+from app.queries import get_market_health_history, get_market_overview, get_top_movers
 
-
-
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
@@ -38,7 +39,9 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 [data-testid="stMetricDelta"] { font-size: 12px !important; font-weight: 600; }
 section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.markdown("## 📊 Crypto Dashboard")
@@ -117,8 +120,11 @@ st.markdown(
 c1, c2, c3 = st.columns(3)
 c1.metric("BTC Dominance", f"{btc_dom_now:.2f}%")
 c2.metric("ETH Dominance", f"{eth_dom_now:.2f}%")
-c3.metric("Others", f"{100 - btc_dom_now - eth_dom_now:.2f}%",
-          help="100% - BTC - ETH. Phần còn lại là altcoins.")
+c3.metric(
+    "Others",
+    f"{100 - btc_dom_now - eth_dom_now:.2f}%",
+    help="100% - BTC - ETH. Phần còn lại là altcoins.",
+)
 
 # Dominance chart
 if history.shape[0] >= 2:
@@ -143,8 +149,8 @@ with st.expander("ℹ️ Market Concentration là gì?"):
 """)
 
 top10_share = row.get("top10_market_share_pct")
-top10_mc    = row.get("top10_market_cap_usd")
-total_mc    = row.get("total_market_cap_usd")
+top10_mc = row.get("top10_market_cap_usd")
+total_mc = row.get("total_market_cap_usd")
 
 c1c, c2c = st.columns(2)
 c1c.metric(
@@ -154,31 +160,41 @@ c1c.metric(
 )
 c2c.metric(
     "Top 10 Market Cap",
-    f"${top10_mc / 1e12:.3f}T" if pd.notna(top10_mc) and top10_mc >= 1e12
+    f"${top10_mc / 1e12:.3f}T"
+    if pd.notna(top10_mc) and top10_mc >= 1e12
     else (f"${top10_mc / 1e9:.1f}B" if pd.notna(top10_mc) else "N/A"),
 )
 
 # Concentration over time
 if history.shape[0] >= 2 and "top10_market_share_pct" in history.columns:
-    fig_conc = go.Figure(go.Scatter(
-        x=history["fetched_at"],
-        y=history["top10_market_share_pct"] * 100,
-        mode="lines+markers",
-        line=dict(color=theme.ACCENT_PURPLE, width=2),
-        marker=dict(size=5),
-        fill="tozeroy",
-        fillcolor="rgba(124,77,255,0.1)",
-        name="Top 10 Share %",
-        hovertemplate="<b>%{x}</b><br>Top 10 Share: %{y:.2f}%<extra></extra>",
-    ))
-    fig_conc.add_hline(y=80, line_dash="dash", line_color=theme.NEUTRAL_GRAY,
-                       annotation_text="80% reference", annotation_font_size=10)
+    fig_conc = go.Figure(
+        go.Scatter(
+            x=history["fetched_at"],
+            y=history["top10_market_share_pct"] * 100,
+            mode="lines+markers",
+            line=dict(color=theme.ACCENT_PURPLE, width=2),
+            marker=dict(size=5),
+            fill="tozeroy",
+            fillcolor="rgba(124,77,255,0.1)",
+            name="Top 10 Share %",
+            hovertemplate="<b>%{x}</b><br>Top 10 Share: %{y:.2f}%<extra></extra>",
+        )
+    )
+    fig_conc.add_hline(
+        y=80,
+        line_dash="dash",
+        line_color=theme.NEUTRAL_GRAY,
+        annotation_text="80% reference",
+        annotation_font_size=10,
+    )
     fig_conc.update_layout(
         template=theme.CHART_TEMPLATE,
         paper_bgcolor=theme.CHART_PAPER_BG,
         plot_bgcolor=theme.CHART_PLOT_BG,
         font=dict(color=theme.CHART_FONT_COLOR, family="Inter, sans-serif", size=12),
-        title=dict(text="Top 10 Market Concentration (%)", font=dict(size=14, color=theme.TEXT_PRIMARY)),
+        title=dict(
+            text="Top 10 Market Concentration (%)", font=dict(size=14, color=theme.TEXT_PRIMARY)
+        ),
         margin=theme.CHART_MARGIN,
         height=300,
         xaxis=dict(gridcolor=theme.BORDER, showgrid=True),
@@ -194,8 +210,8 @@ st.markdown("---")
 st.subheader("⚙️ Pipeline Data Health")
 
 fetched_at = row["fetched_at"]
-from datetime import datetime, timezone
-now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+
+now_utc = datetime.now(UTC).replace(tzinfo=None)
 staleness_min = (now_utc - fetched_at.to_pydatetime().replace(tzinfo=None)).total_seconds() / 60
 
 if staleness_min < 120:
@@ -210,9 +226,12 @@ else:
 
 c1d, c2d, c3d = st.columns(3)
 c1d.metric("Last Pipeline Run", fetched_at.strftime("%Y-%m-%d %H:%M") + " UTC")
-c2d.metric("Data Freshness", f"{freshness_icon} {freshness_label}",
-           delta=f"{staleness_min:.0f} min ago")
-c3d.metric("Snapshots in History", str(len(history)), help="Tổng số lần pipeline fetch global endpoint")
+c2d.metric(
+    "Data Freshness", f"{freshness_icon} {freshness_label}", delta=f"{staleness_min:.0f} min ago"
+)
+c3d.metric(
+    "Snapshots in History", str(len(history)), help="Tổng số lần pipeline fetch global endpoint"
+)
 
 # Summary table
 st.markdown("**Data Volume Summary**")

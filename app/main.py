@@ -17,16 +17,17 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
-from app.queries import get_market_overview, get_market_health_history
-from app import charts, theme
+from app import charts
+from app.queries import get_market_health_history, get_market_overview
 
 # ─── Page config ──────────────────────────────────────────────────────────
 
 # ─── Global CSS ───────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* Import Inter from Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -80,7 +81,9 @@ hr {
     border: 1px solid #30363D;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ─── Sidebar navigation label ─────────────────────────────────────────────
@@ -175,23 +178,23 @@ st.markdown("---")
 
 # ─── Market Regime Indicator ──────────────────────────────────────────────
 btc_dom_val = row["btc_dominance_pct"]
-mc_chg_val  = row.get("market_cap_change_pct_24h", 0) or 0
+mc_chg_val = row.get("market_cap_change_pct_24h", 0) or 0
 
 if btc_dom_val >= 55:
     regime_label = "🟠 Bitcoin Season"
-    regime_desc  = (
+    regime_desc = (
         f"BTC dominance cao ({btc_dom_val:.1f}%) — thị trường đang tập trung vào Bitcoin. "
         "Altcoins thường underperform trong giai đoạn này."
     )
 elif btc_dom_val <= 45:
     regime_label = "🟣 Altcoin Season"
-    regime_desc  = (
+    regime_desc = (
         f"BTC dominance thấp ({btc_dom_val:.1f}%) — tiền đang chảy sang altcoins. "
         "Thường xảy ra sau khi BTC đã tăng mạnh."
     )
 else:
     regime_label = "⚪ Neutral"
-    regime_desc  = (
+    regime_desc = (
         f"BTC dominance ở mức trung tính ({btc_dom_val:.1f}%). "
         "Không có tín hiệu rõ ràng về Bitcoin hay Altcoin season."
     )

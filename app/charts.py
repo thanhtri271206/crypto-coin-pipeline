@@ -3,11 +3,11 @@ Reusable chart builders dùng Plotly.
 Mỗi function nhận DataFrame đã được clean và trả về go.Figure.
 Áp dụng theme constants nhất quán.
 """
+
 from __future__ import annotations
 
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 from plotly.subplots import make_subplots
 
 from app import theme
@@ -45,6 +45,7 @@ def _apply_base_layout(fig: go.Figure, title: str = "", height: int = 380) -> go
 # ════════════════════════════════════════════════════════════════════════════
 # Market Health Charts
 # ════════════════════════════════════════════════════════════════════════════
+
 
 def market_cap_trend(df: pd.DataFrame) -> go.Figure:
     """
@@ -86,7 +87,9 @@ def market_cap_trend(df: pd.DataFrame) -> go.Figure:
         paper_bgcolor=theme.CHART_PAPER_BG,
         plot_bgcolor=theme.CHART_PLOT_BG,
         font=dict(color=theme.CHART_FONT_COLOR, family="Inter, sans-serif", size=12),
-        title=dict(text="Total Market Cap & 24h Change", font=dict(size=14, color=theme.TEXT_PRIMARY)),
+        title=dict(
+            text="Total Market Cap & 24h Change", font=dict(size=14, color=theme.TEXT_PRIMARY)
+        ),
         margin=theme.CHART_MARGIN,
         height=360,
         legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=11)),
@@ -114,26 +117,37 @@ def dominance_area(df: pd.DataFrame) -> go.Figure:
 
     other_pct = 100 - df["btc_dominance_pct"] - df["eth_dominance_pct"]
 
-    fig.add_trace(go.Scatter(
-        x=df["fetched_at"], y=df["btc_dominance_pct"],
-        name="BTC", fill="tozeroy",
-        line=dict(color=theme.COIN_COLORS["bitcoin"], width=2),
-        fillcolor=f"rgba(247,147,26,0.3)",
-        mode="lines",
-    ))
-    fig.add_trace(go.Scatter(
-        x=df["fetched_at"], y=df["eth_dominance_pct"],
-        name="ETH", fill="tozeroy",
-        line=dict(color=theme.COIN_COLORS["ethereum"], width=2),
-        fillcolor=f"rgba(98,126,234,0.3)",
-        mode="lines",
-    ))
-    fig.add_trace(go.Scatter(
-        x=df["fetched_at"], y=other_pct,
-        name="Others",
-        line=dict(color=theme.NEUTRAL_GRAY, width=1.5, dash="dot"),
-        mode="lines",
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=df["fetched_at"],
+            y=df["btc_dominance_pct"],
+            name="BTC",
+            fill="tozeroy",
+            line=dict(color=theme.COIN_COLORS["bitcoin"], width=2),
+            fillcolor="rgba(247,147,26,0.3)",
+            mode="lines",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["fetched_at"],
+            y=df["eth_dominance_pct"],
+            name="ETH",
+            fill="tozeroy",
+            line=dict(color=theme.COIN_COLORS["ethereum"], width=2),
+            fillcolor="rgba(98,126,234,0.3)",
+            mode="lines",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["fetched_at"],
+            y=other_pct,
+            name="Others",
+            line=dict(color=theme.NEUTRAL_GRAY, width=1.5, dash="dot"),
+            mode="lines",
+        )
+    )
 
     _apply_base_layout(fig, "BTC & ETH Market Dominance (%)", height=300)
     fig.update_yaxes(title_text="Dominance %")
@@ -144,29 +158,32 @@ def dominance_area(df: pd.DataFrame) -> go.Figure:
 # Top Movers Charts
 # ════════════════════════════════════════════════════════════════════════════
 
-def gainers_losers_bar(df: pd.DataFrame, pct_col: str = "price_change_percentage_24h",
-                        title: str = "Price Change 24h (%)") -> go.Figure:
+
+def gainers_losers_bar(
+    df: pd.DataFrame,
+    pct_col: str = "price_change_percentage_24h",
+    title: str = "Price Change 24h (%)",
+) -> go.Figure:
     """
     Horizontal bar chart cho gainers/losers.
     df cần: coin_id, [pct_col]
     """
     df = df.dropna(subset=[pct_col]).sort_values(pct_col, ascending=True)
-    
-    colors = [
-        theme.POSITIVE_GREEN if v >= 0 else theme.NEGATIVE_RED
-        for v in df[pct_col]
-    ]
+
+    colors = [theme.POSITIVE_GREEN if v >= 0 else theme.NEGATIVE_RED for v in df[pct_col]]
     labels = [theme.COIN_NAMES.get(c, c) for c in df["coin_id"]]
 
-    fig = go.Figure(go.Bar(
-        x=df[pct_col],
-        y=labels,
-        orientation="h",
-        marker_color=colors,
-        text=[f"{v:+.2f}%" for v in df[pct_col]],
-        textposition="outside",
-        textfont=dict(color=theme.TEXT_SECONDARY, size=11),
-    ))
+    fig = go.Figure(
+        go.Bar(
+            x=df[pct_col],
+            y=labels,
+            orientation="h",
+            marker_color=colors,
+            text=[f"{v:+.2f}%" for v in df[pct_col]],
+            textposition="outside",
+            textfont=dict(color=theme.TEXT_SECONDARY, size=11),
+        )
+    )
 
     _apply_base_layout(fig, title, height=max(300, len(df) * 38))
     fig.update_xaxes(
@@ -191,26 +208,35 @@ def volume_spike_scatter(df: pd.DataFrame) -> go.Figure:
     colors = [theme.COIN_COLORS.get(c, theme.NEUTRAL_GRAY) for c in df["coin_id"]]
     labels = [theme.COIN_NAMES.get(c, c) for c in df["coin_id"]]
 
-    fig = go.Figure(go.Scatter(
-        x=df["price_change_percentage_24h"],
-        y=df["volume_spike_ratio"],
-        mode="markers+text",
-        marker=dict(size=14, color=colors, line=dict(width=1, color=theme.BORDER)),
-        text=[theme.COIN_SYMBOLS.get(c, c) for c in df["coin_id"]],
-        textposition="top center",
-        textfont=dict(size=10, color=theme.TEXT_PRIMARY),
-        customdata=list(zip(labels, df["price_change_percentage_24h"], df["volume_spike_ratio"])),
-        hovertemplate=(
-            "<b>%{customdata[0]}</b><br>"
-            "Price Change: %{customdata[1]:+.2f}%<br>"
-            "Volume Spike: %{customdata[2]:.2f}x avg<br>"
-            "<extra></extra>"
-        ),
-    ))
+    fig = go.Figure(
+        go.Scatter(
+            x=df["price_change_percentage_24h"],
+            y=df["volume_spike_ratio"],
+            mode="markers+text",
+            marker=dict(size=14, color=colors, line=dict(width=1, color=theme.BORDER)),
+            text=[theme.COIN_SYMBOLS.get(c, c) for c in df["coin_id"]],
+            textposition="top center",
+            textfont=dict(size=10, color=theme.TEXT_PRIMARY),
+            customdata=list(
+                zip(labels, df["price_change_percentage_24h"], df["volume_spike_ratio"])
+            ),
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Price Change: %{customdata[1]:+.2f}%<br>"
+                "Volume Spike: %{customdata[2]:.2f}x avg<br>"
+                "<extra></extra>"
+            ),
+        )
+    )
 
     # Reference lines
-    fig.add_hline(y=2.0, line_dash="dash", line_color=theme.WARN_AMBER,
-                  annotation_text="2x spike threshold", annotation_font_size=10)
+    fig.add_hline(
+        y=2.0,
+        line_dash="dash",
+        line_color=theme.WARN_AMBER,
+        annotation_text="2x spike threshold",
+        annotation_font_size=10,
+    )
     fig.add_vline(x=0, line_color=theme.BORDER, line_width=1)
 
     _apply_base_layout(fig, "Volume Spike vs. Price Change (24h)", height=400)
@@ -223,6 +249,7 @@ def volume_spike_scatter(df: pd.DataFrame) -> go.Figure:
 # Coin Deep Dive Charts
 # ════════════════════════════════════════════════════════════════════════════
 
+
 def price_line(df: pd.DataFrame, coin_id: str, use_hourly: bool = False) -> go.Figure:
     """
     Line chart giá USD.
@@ -233,16 +260,19 @@ def price_line(df: pd.DataFrame, coin_id: str, use_hourly: bool = False) -> go.F
     color = theme.COIN_COLORS.get(coin_id, theme.ACCENT_BLUE)
     label = theme.COIN_NAMES.get(coin_id, coin_id)
 
-    fig = go.Figure(go.Scatter(
-        x=df[x_col], y=df[y_col],
-        mode="lines+markers",
-        name=label,
-        line=dict(color=color, width=2.5),
-        marker=dict(size=5, color=color),
-        fill="tozeroy",
-        fillcolor=f"rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.07)",
-        hovertemplate="<b>%{x}</b><br>Price: $%{y:,.4f}<extra></extra>",
-    ))
+    fig = go.Figure(
+        go.Scatter(
+            x=df[x_col],
+            y=df[y_col],
+            mode="lines+markers",
+            name=label,
+            line=dict(color=color, width=2.5),
+            marker=dict(size=5, color=color),
+            fill="tozeroy",
+            fillcolor=f"rgba({int(color[1:3], 16)},{int(color[3:5], 16)},{int(color[5:7], 16)},0.07)",
+            hovertemplate="<b>%{x}</b><br>Price: $%{y:,.4f}<extra></extra>",
+        )
+    )
 
     _apply_base_layout(fig, f"{label} — Price (USD)", height=350)
     fig.update_yaxes(title_text="Price (USD)")
@@ -258,18 +288,17 @@ def daily_return_bar(df: pd.DataFrame, coin_id: str) -> go.Figure:
     if df.empty:
         return _empty_fig("Cần ≥2 data points để tính daily return")
 
-    colors = [
-        theme.POSITIVE_GREEN if v >= 0 else theme.NEGATIVE_RED
-        for v in df["daily_return"]
-    ]
+    colors = [theme.POSITIVE_GREEN if v >= 0 else theme.NEGATIVE_RED for v in df["daily_return"]]
     label = theme.COIN_NAMES.get(coin_id, coin_id)
 
-    fig = go.Figure(go.Bar(
-        x=df["snapshot_date"],
-        y=df["daily_return"] * 100,
-        marker_color=colors,
-        hovertemplate="<b>%{x}</b><br>Daily Return: %{y:+.3f}%<extra></extra>",
-    ))
+    fig = go.Figure(
+        go.Bar(
+            x=df["snapshot_date"],
+            y=df["daily_return"] * 100,
+            marker_color=colors,
+            hovertemplate="<b>%{x}</b><br>Daily Return: %{y:+.3f}%<extra></extra>",
+        )
+    )
 
     fig.add_hline(y=0, line_color=theme.BORDER, line_width=1)
     _apply_base_layout(fig, f"{label} — Daily Return (%)", height=260)
@@ -286,9 +315,9 @@ def rolling_return_lines(df: pd.DataFrame, coin_id: str) -> go.Figure:
     fig = go.Figure()
 
     series = [
-        ("rolling_return_7d",  "7-Day Return",  theme.POSITIVE_GREEN, "solid"),
-        ("rolling_return_30d", "30-Day Return", theme.ACCENT_BLUE,    "dot"),
-        ("rolling_return_90d", "90-Day Return", theme.WARN_AMBER,     "dash"),
+        ("rolling_return_7d", "7-Day Return", theme.POSITIVE_GREEN, "solid"),
+        ("rolling_return_30d", "30-Day Return", theme.ACCENT_BLUE, "dot"),
+        ("rolling_return_90d", "90-Day Return", theme.WARN_AMBER, "dash"),
     ]
 
     any_data = False
@@ -296,15 +325,17 @@ def rolling_return_lines(df: pd.DataFrame, coin_id: str) -> go.Figure:
         sub = df.dropna(subset=[col])
         if not sub.empty:
             any_data = True
-            fig.add_trace(go.Scatter(
-                x=sub["snapshot_date"],
-                y=sub[col] * 100,
-                name=name,
-                mode="lines+markers",
-                line=dict(color=color, width=2, dash=dash),
-                marker=dict(size=4),
-                hovertemplate=f"<b>%{{x}}</b><br>{name}: %{{y:+.2f}}%<extra></extra>",
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=sub["snapshot_date"],
+                    y=sub[col] * 100,
+                    name=name,
+                    mode="lines+markers",
+                    line=dict(color=color, width=2, dash=dash),
+                    marker=dict(size=4),
+                    hovertemplate=f"<b>%{{x}}</b><br>{name}: %{{y:+.2f}}%<extra></extra>",
+                )
+            )
 
     if not any_data:
         return _empty_fig("Rolling returns sẽ có sau khi pipeline chạy đủ ngày (7/30/90)")
@@ -323,26 +354,30 @@ def drawdown_area(df: pd.DataFrame, coin_id: str, pipeline_start_date: str = "")
     label = theme.COIN_NAMES.get(coin_id, coin_id)
     df = df.dropna(subset=["drawdown_pct"])
 
-    fig = go.Figure(go.Scatter(
-        x=df["snapshot_date"],
-        y=df["drawdown_pct"] * 100,
-        mode="lines",
-        fill="tozeroy",
-        line=dict(color=theme.NEGATIVE_RED, width=2),
-        fillcolor="rgba(239,83,80,0.15)",
-        name="Drawdown",
-        hovertemplate="<b>%{x}</b><br>Drawdown: %{y:.2f}%<extra></extra>",
-    ))
+    fig = go.Figure(
+        go.Scatter(
+            x=df["snapshot_date"],
+            y=df["drawdown_pct"] * 100,
+            mode="lines",
+            fill="tozeroy",
+            line=dict(color=theme.NEGATIVE_RED, width=2),
+            fillcolor="rgba(239,83,80,0.15)",
+            name="Drawdown",
+            hovertemplate="<b>%{x}</b><br>Drawdown: %{y:.2f}%<extra></extra>",
+        )
+    )
 
     annotation_text = (
-        f"⚠️ Drawdown tính từ đỉnh giá đầu pipeline"
+        "⚠️ Drawdown tính từ đỉnh giá đầu pipeline"
         + (f" ({pipeline_start_date})" if pipeline_start_date else "")
         + " — KHÔNG phải ATH lịch sử"
     )
     fig.add_annotation(
         text=annotation_text,
-        xref="paper", yref="paper",
-        x=0, y=-0.18,
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=-0.18,
         showarrow=False,
         font=dict(size=10, color=theme.WARN_AMBER),
         align="left",
@@ -358,6 +393,7 @@ def drawdown_area(df: pd.DataFrame, coin_id: str, pipeline_start_date: str = "")
 # Comparison Charts
 # ════════════════════════════════════════════════════════════════════════════
 
+
 def normalized_price_lines(df: pd.DataFrame, coin_ids: list[str]) -> go.Figure:
     """
     Normalized price chart (base = 100 at start date).
@@ -371,18 +407,25 @@ def normalized_price_lines(df: pd.DataFrame, coin_ids: list[str]) -> go.Figure:
             continue
         color = theme.COIN_COLORS.get(cid, theme.NEUTRAL_GRAY)
         label = theme.COIN_SYMBOLS.get(cid, cid)
-        fig.add_trace(go.Scatter(
-            x=sub["snapshot_date"],
-            y=sub["normalized_price"],
-            name=label,
-            mode="lines+markers",
-            line=dict(color=color, width=2),
-            marker=dict(size=5),
-            hovertemplate=f"<b>%{{x}}</b><br>{label}: %{{y:.1f}}<extra></extra>",
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=sub["snapshot_date"],
+                y=sub["normalized_price"],
+                name=label,
+                mode="lines+markers",
+                line=dict(color=color, width=2),
+                marker=dict(size=5),
+                hovertemplate=f"<b>%{{x}}</b><br>{label}: %{{y:.1f}}<extra></extra>",
+            )
+        )
 
-    fig.add_hline(y=100, line_dash="dash", line_color=theme.NEUTRAL_GRAY,
-                  annotation_text="Base (100)", annotation_font_size=10)
+    fig.add_hline(
+        y=100,
+        line_dash="dash",
+        line_color=theme.NEUTRAL_GRAY,
+        annotation_text="Base (100)",
+        annotation_font_size=10,
+    )
 
     _apply_base_layout(fig, "Normalized Price Performance (Base = 100)", height=380)
     fig.update_yaxes(title_text="Normalized Price")
@@ -397,31 +440,37 @@ def risk_return_scatter(df: pd.DataFrame) -> go.Figure:
     """
     df = df.dropna(subset=["volatility_30d", "rolling_return_30d"])
     if df.empty:
-        return _empty_fig("Risk-Return scatter cần ≥30 ngày data (volatility_30d, rolling_return_30d)")
+        return _empty_fig(
+            "Risk-Return scatter cần ≥30 ngày data (volatility_30d, rolling_return_30d)"
+        )
 
     colors = [theme.COIN_COLORS.get(c, theme.NEUTRAL_GRAY) for c in df["coin_id"]]
     labels = [theme.COIN_NAMES.get(c, c) for c in df["coin_id"]]
 
-    fig = go.Figure(go.Scatter(
-        x=df["volatility_30d"] * 100,
-        y=df["rolling_return_30d"] * 100,
-        mode="markers+text",
-        marker=dict(
-            size=16,
-            color=colors,
-            line=dict(width=1.5, color=theme.BORDER),
-        ),
-        text=[theme.COIN_SYMBOLS.get(c, c) for c in df["coin_id"]],
-        textposition="top center",
-        textfont=dict(size=10, color=theme.TEXT_PRIMARY),
-        customdata=list(zip(labels, df["volatility_30d"] * 100, df["rolling_return_30d"] * 100)),
-        hovertemplate=(
-            "<b>%{customdata[0]}</b><br>"
-            "Volatility 30d: %{customdata[1]:.2f}%<br>"
-            "Return 30d: %{customdata[2]:+.2f}%<br>"
-            "<extra></extra>"
-        ),
-    ))
+    fig = go.Figure(
+        go.Scatter(
+            x=df["volatility_30d"] * 100,
+            y=df["rolling_return_30d"] * 100,
+            mode="markers+text",
+            marker=dict(
+                size=16,
+                color=colors,
+                line=dict(width=1.5, color=theme.BORDER),
+            ),
+            text=[theme.COIN_SYMBOLS.get(c, c) for c in df["coin_id"]],
+            textposition="top center",
+            textfont=dict(size=10, color=theme.TEXT_PRIMARY),
+            customdata=list(
+                zip(labels, df["volatility_30d"] * 100, df["rolling_return_30d"] * 100)
+            ),
+            hovertemplate=(
+                "<b>%{customdata[0]}</b><br>"
+                "Volatility 30d: %{customdata[1]:.2f}%<br>"
+                "Return 30d: %{customdata[2]:+.2f}%<br>"
+                "<extra></extra>"
+            ),
+        )
+    )
 
     fig.add_hline(y=0, line_color=theme.BORDER, line_width=1)
     _apply_base_layout(fig, "Risk-Return Map (30-Day)", height=420)
@@ -438,13 +487,12 @@ def rolling_return_grouped_bar(df: pd.DataFrame, coin_ids: list[str]) -> go.Figu
     fig = go.Figure()
 
     windows = [
-        ("rolling_return_7d",  "7-Day",  theme.POSITIVE_GREEN),
+        ("rolling_return_7d", "7-Day", theme.POSITIVE_GREEN),
         ("rolling_return_30d", "30-Day", theme.ACCENT_BLUE),
         ("rolling_return_90d", "90-Day", theme.WARN_AMBER),
     ]
 
     filtered = df[df["coin_id"].isin(coin_ids)]
-    labels = [theme.COIN_SYMBOLS.get(c, c) for c in filtered["coin_id"]]
     any_bar = False
 
     for col, name, color in windows:
@@ -453,18 +501,16 @@ def rolling_return_grouped_bar(df: pd.DataFrame, coin_ids: list[str]) -> go.Figu
             continue
         any_bar = True
         bar_labels = [theme.COIN_SYMBOLS.get(c, c) for c in sub["coin_id"]]
-        bar_colors = [
-            theme.POSITIVE_GREEN if v >= 0 else theme.NEGATIVE_RED
-            for v in sub[col]
-        ]
-        fig.add_trace(go.Bar(
-            name=name,
-            x=bar_labels,
-            y=sub[col] * 100,
-            marker_color=color,
-            opacity=0.85,
-            hovertemplate=f"<b>%{{x}}</b><br>{name}: %{{y:+.2f}}%<extra></extra>",
-        ))
+        fig.add_trace(
+            go.Bar(
+                name=name,
+                x=bar_labels,
+                y=sub[col] * 100,
+                marker_color=color,
+                opacity=0.85,
+                hovertemplate=f"<b>%{{x}}</b><br>{name}: %{{y:+.2f}}%<extra></extra>",
+            )
+        )
 
     if not any_bar:
         return _empty_fig("Rolling return data sẽ có sau khi pipeline chạy đủ ngày")
@@ -489,30 +535,36 @@ def drawdown_heatmap(df: pd.DataFrame) -> go.Figure:
 
     coin_labels = [theme.COIN_SYMBOLS.get(c, c) for c in pivot.index]
 
-    fig = go.Figure(go.Heatmap(
-        z=pivot.values,
-        x=[str(d) for d in pivot.columns],
-        y=coin_labels,
-        colorscale=[
-            [0.0, theme.NEGATIVE_RED],
-            [0.5, theme.WARN_AMBER],
-            [1.0, theme.POSITIVE_GREEN],
-        ],
-        zmid=0,
-        zmin=-30, zmax=0,
-        colorbar=dict(
-            title="Drawdown %",
-            tickfont=dict(size=10, color=theme.TEXT_SECONDARY),
-        ),
-        hovertemplate="<b>%{y}</b><br>%{x}<br>Drawdown: %{z:.1f}%<extra></extra>",
-    ))
+    fig = go.Figure(
+        go.Heatmap(
+            z=pivot.values,
+            x=[str(d) for d in pivot.columns],
+            y=coin_labels,
+            colorscale=[
+                [0.0, theme.NEGATIVE_RED],
+                [0.5, theme.WARN_AMBER],
+                [1.0, theme.POSITIVE_GREEN],
+            ],
+            zmid=0,
+            zmin=-30,
+            zmax=0,
+            colorbar=dict(
+                title="Drawdown %",
+                tickfont=dict(size=10, color=theme.TEXT_SECONDARY),
+            ),
+            hovertemplate="<b>%{y}</b><br>%{x}<br>Drawdown: %{z:.1f}%<extra></extra>",
+        )
+    )
 
     _apply_base_layout(fig, "Drawdown Heatmap from Pipeline Peak", height=380)
     fig.update_layout(margin=dict(l=10, r=10, t=40, b=60))
     fig.add_annotation(
         text="⚠️ Peak = giá cao nhất kể từ đầu pipeline, không phải ATH lịch sử",
-        xref="paper", yref="paper",
-        x=0, y=-0.18, showarrow=False,
+        xref="paper",
+        yref="paper",
+        x=0,
+        y=-0.18,
+        showarrow=False,
         font=dict(size=10, color=theme.WARN_AMBER),
     )
     return fig
@@ -529,21 +581,25 @@ def correlation_heatmap(df_wide: pd.DataFrame) -> go.Figure:
     corr = df_wide.corr(numeric_only=True)
     labels = [theme.COIN_SYMBOLS.get(c, c) for c in corr.columns]
 
-    fig = go.Figure(go.Heatmap(
-        z=corr.values,
-        x=labels, y=labels,
-        colorscale=[
-            [0.0, theme.NEGATIVE_RED],
-            [0.5, "#2D3748"],
-            [1.0, theme.POSITIVE_GREEN],
-        ],
-        zmin=-1, zmax=1,
-        text=[[f"{v:.2f}" for v in row] for row in corr.values],
-        texttemplate="%{text}",
-        textfont=dict(size=10),
-        colorbar=dict(title="Correlation", tickfont=dict(size=10, color=theme.TEXT_SECONDARY)),
-        hovertemplate="<b>%{x} × %{y}</b><br>Correlation: %{z:.3f}<extra></extra>",
-    ))
+    fig = go.Figure(
+        go.Heatmap(
+            z=corr.values,
+            x=labels,
+            y=labels,
+            colorscale=[
+                [0.0, theme.NEGATIVE_RED],
+                [0.5, "#2D3748"],
+                [1.0, theme.POSITIVE_GREEN],
+            ],
+            zmin=-1,
+            zmax=1,
+            text=[[f"{v:.2f}" for v in row] for row in corr.values],
+            texttemplate="%{text}",
+            textfont=dict(size=10),
+            colorbar=dict(title="Correlation", tickfont=dict(size=10, color=theme.TEXT_SECONDARY)),
+            hovertemplate="<b>%{x} × %{y}</b><br>Correlation: %{z:.3f}<extra></extra>",
+        )
+    )
 
     _apply_base_layout(fig, "Return Correlation Matrix", height=400)
     return fig
@@ -553,13 +609,16 @@ def correlation_heatmap(df_wide: pd.DataFrame) -> go.Figure:
 # Utility
 # ════════════════════════════════════════════════════════════════════════════
 
+
 def _empty_fig(message: str = "Chưa có đủ dữ liệu") -> go.Figure:
     """Trả về figure trống với message informative."""
     fig = go.Figure()
     fig.add_annotation(
         text=f"📊 {message}",
-        xref="paper", yref="paper",
-        x=0.5, y=0.5,
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=0.5,
         showarrow=False,
         font=dict(size=13, color=theme.TEXT_SECONDARY),
         align="center",

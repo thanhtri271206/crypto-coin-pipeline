@@ -17,14 +17,15 @@ import streamlit as st
 
 from app.db import get_conn
 
-TTL_REALTIME = 300    # 5 phút
-TTL_DAILY    = 3600   # 1 giờ
-TTL_STATIC   = 86400  # 24 giờ
+TTL_REALTIME = 300  # 5 phút
+TTL_DAILY = 3600  # 1 giờ
+TTL_STATIC = 86400  # 24 giờ
 
 
 # ════════════════════════════════════════════════════════════════════════════
 # GROUP 1: Market Health (macro view)
 # ════════════════════════════════════════════════════════════════════════════
+
 
 @st.cache_data(ttl=TTL_REALTIME)
 def get_market_overview() -> pd.DataFrame:
@@ -76,6 +77,7 @@ def get_market_health_history() -> pd.DataFrame:
 # GROUP 2: Top Movers (real-time snapshot)
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @st.cache_data(ttl=TTL_REALTIME)
 def get_top_movers() -> pd.DataFrame:
     """
@@ -105,6 +107,7 @@ def get_top_movers() -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════════════
 # GROUP 3: Coin Performance (daily rolling metrics)
 # ════════════════════════════════════════════════════════════════════════════
+
 
 @st.cache_data(ttl=TTL_DAILY)
 def get_coin_performance_latest() -> pd.DataFrame:
@@ -156,6 +159,7 @@ def get_coin_performance_history(coin_id: str) -> pd.DataFrame:
 # ════════════════════════════════════════════════════════════════════════════
 # GROUP 4: Price History (fact tables)
 # ════════════════════════════════════════════════════════════════════════════
+
 
 @st.cache_data(ttl=TTL_DAILY)
 def get_daily_prices(coin_id: str | None = None) -> pd.DataFrame:
@@ -239,6 +243,7 @@ def get_hourly_prices(coin_id: str | None = None) -> pd.DataFrame:
 # GROUP 5: Dimensions
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @st.cache_data(ttl=TTL_STATIC)
 def get_coin_list() -> pd.DataFrame:
     """
@@ -285,12 +290,13 @@ def get_coin_metadata(coin_id: str) -> pd.DataFrame:
 # GROUP 6: Comparison (multi-coin analytics)
 # ════════════════════════════════════════════════════════════════════════════
 
+
 @st.cache_data(ttl=TTL_DAILY)
 def get_normalized_prices(coin_ids: list[str] | None = None) -> pd.DataFrame:
     """
     Giá normalized về 100 từ ngày đầu tiên — so sánh relative performance.
     Nguồn: fct_market_snapshot_daily.close
-    
+
     Coin_ids=None → trả về toàn bộ coins.
     """
     sql = """

@@ -18,20 +18,20 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
+from app import charts, theme
 from app.queries import (
     get_coin_list,
-    get_normalized_prices,
     get_coin_performance_latest,
+    get_conn,
     get_daily_returns_wide,
+    get_normalized_prices,
 )
-from app import charts, theme
 
-
-
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
@@ -44,7 +44,9 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 [data-testid="stMetricDelta"] { font-size: 12px !important; font-weight: 600; }
 section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     st.markdown("## 📊 Crypto Dashboard")
@@ -77,8 +79,9 @@ if not show_stable:
     available_coins = [c for c in available_coins if c not in theme.STABLECOINS]
 
 # Default: BTC, ETH, SOL, BNB, XRP
-default_selection = [c for c in ["bitcoin", "ethereum", "solana", "binancecoin", "ripple"]
-                     if c in available_coins][:5]
+default_selection = [
+    c for c in ["bitcoin", "ethereum", "solana", "binancecoin", "ripple"] if c in available_coins
+][:5]
 
 selected_coins = st.multiselect(
     "Chọn Coins để so sánh",
@@ -112,17 +115,19 @@ if df_norm.empty or df_norm["normalized_price"].isna().all():
 else:
     fig_norm = charts.normalized_price_lines(df_norm, selected_coins)
     st.plotly_chart(fig_norm, use_container_width=True, key="norm_price")
-    
+
     # Show quick winner/loser if ≥2 days
     latest_norm = df_norm.groupby("coin_id")["normalized_price"].last()
     if not latest_norm.empty and latest_norm.notna().any():
         winner = latest_norm.idxmax()
-        loser  = latest_norm.idxmin()
-        w_val  = latest_norm[winner]
-        l_val  = latest_norm[loser]
-        
+        loser = latest_norm.idxmin()
+        w_val = latest_norm[winner]
+        l_val = latest_norm[loser]
+
         col_w, col_l = st.columns(2)
-        col_w.success(f"🏆 **Best performer**: {theme.COIN_NAMES.get(winner, winner)} ({w_val:.1f})")
+        col_w.success(
+            f"🏆 **Best performer**: {theme.COIN_NAMES.get(winner, winner)} ({w_val:.1f})"
+        )
         col_l.error(f"⬇️ **Worst performer**: {theme.COIN_NAMES.get(loser, loser)} ({l_val:.1f})")
 
 st.markdown("---")
@@ -138,21 +143,26 @@ if df_perf_sel.empty:
 else:
     fig_bar = charts.rolling_return_grouped_bar(df_perf_sel, selected_coins)
     st.plotly_chart(fig_bar, use_container_width=True, key="rolling_bar")
-    
+
     # Show performance table
-    tbl = df_perf_sel[["coin_id", "rolling_return_7d", "rolling_return_30d", "rolling_return_90d"]].copy()
+    tbl = df_perf_sel[
+        ["coin_id", "rolling_return_7d", "rolling_return_30d", "rolling_return_90d"]
+    ].copy()
     tbl["coin_id"] = tbl["coin_id"].map(theme.COIN_SYMBOLS).fillna(tbl["coin_id"])
     tbl.columns = ["Symbol", "Return 7d", "Return 30d", "Return 90d"]
-    
+
     def fmt_pct(v):
-        return f"{v*100:+.2f}%" if pd.notna(v) else "N/A"
+        return f"{v * 100:+.2f}%" if pd.notna(v) else "N/A"
+
     def style_ret(val):
-        if isinstance(val, str): return "color: #8B949E"
+        if isinstance(val, str):
+            return "color: #8B949E"
         return ""
-    
+
     st.dataframe(
         tbl.style.format({"Return 7d": fmt_pct, "Return 30d": fmt_pct, "Return 90d": fmt_pct}),
-        use_container_width=True, hide_index=True
+        use_container_width=True,
+        hide_index=True,
     )
 
 st.markdown("---")
@@ -194,7 +204,8 @@ st.warning(
 )
 
 # Load drawdown history for selected coins
-from app.queries import get_conn
+
+
 @st.cache_data(ttl=3600)
 def get_drawdown_history(coin_ids: tuple) -> pd.DataFrame:
     sql = """
@@ -204,6 +215,7 @@ def get_drawdown_history(coin_ids: tuple) -> pd.DataFrame:
         ORDER BY snapshot_date, coin_id
     """.format(", ".join(f"'{c}'" for c in coin_ids))
     return get_conn().execute(sql).fetchdf()
+
 
 df_dd = get_drawdown_history(tuple(selected_coins))
 
