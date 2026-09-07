@@ -1,7 +1,7 @@
 import unittest
-from datetime import datetime
-from ingestion.coingecko_client import CoinGeckoClient
+
 from ingestion import schemas
+from ingestion.coingecko_client import CoinGeckoClient
 
 
 class TestCoinGeckoValidation(unittest.TestCase):
@@ -65,9 +65,7 @@ class TestCoinGeckoValidation(unittest.TestCase):
         self.assertEqual(validated.total_market_cap["usd"], 2500000000000.0)
 
     def test_validate_coin_ohlc(self):
-        raw_data = [
-            [1700000000000, 50000.0, 51000.0, 49500.0, 50500.0]
-        ]
+        raw_data = [[1700000000000, 50000.0, 51000.0, 49500.0, 50500.0]]
         validated = CoinGeckoClient.validate_coin_ohlc(raw_data)
         self.assertEqual(len(validated), 1)
         self.assertEqual(validated[0], [1700000000000, 50000.0, 51000.0, 49500.0, 50500.0])

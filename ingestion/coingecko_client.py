@@ -6,6 +6,7 @@ import httpx
 from dotenv import load_dotenv
 from pydantic import RootModel, ValidationError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+
 from ingestion import schemas
 
 load_dotenv()

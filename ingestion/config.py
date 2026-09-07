@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import yaml
 
 # Đường dẫn tới thư mục gốc dự án và file config
@@ -9,7 +10,7 @@ CONFIG_PATH = PROJECT_ROOT / "config" / "coins.yaml"
 def load_coin_ids(config_path: Path = CONFIG_PATH) -> list[str]:
     """Parse file config/coins.yaml và trả về danh sách danh mục coin ID."""
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     coins = data.get("coins", [])
     return [coin["id"] for coin in coins if isinstance(coin, dict) and "id" in coin]

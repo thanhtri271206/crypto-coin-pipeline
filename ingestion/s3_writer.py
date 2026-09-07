@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import boto3
@@ -36,13 +36,13 @@ def is_transient_s3_error(exception: Exception) -> bool:
 
 def generate_s3_key(prefix: str, fetched_at: datetime) -> str:
     """Tạo S3 key chuẩn định dạng partition Data Lake.
-    
+
     Ví dụ: raw/coins/markets/date=2026-08-15/fetched_at=2026-08-15T14-15-00Z.json
     """
     if fetched_at.tzinfo is None:
-        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+        fetched_at = fetched_at.replace(tzinfo=UTC)
     else:
-        fetched_at = fetched_at.astimezone(timezone.utc)
+        fetched_at = fetched_at.astimezone(UTC)
 
     clean_prefix = prefix.strip("/")
     date_str = fetched_at.strftime("%Y-%m-%d")
@@ -64,7 +64,13 @@ class S3Writer:
         if not self.bucket_name:
             raise ValueError("bucket_name is required or must be set in S3_BUCKET_NAME env var")
 
-        region = region_name or os.getenv("AWS_DEFAULT_REGION") or os.getenv("AWS_REGION") or os.getenv("REGION_NAME") or "ap-southeast-1"
+        region = (
+            region_name
+            or os.getenv("AWS_DEFAULT_REGION")
+            or os.getenv("AWS_REGION")
+            or os.getenv("REGION_NAME")
+            or "ap-southeast-1"
+        )
 
         client_kwargs: dict[str, Any] = {"region_name": region}
         if aws_access_key_id and aws_secret_access_key:
@@ -73,8 +79,8 @@ class S3Writer:
             if aws_session_token:
                 client_kwargs["aws_session_token"] = aws_session_token
 
-        endpoint = endpoint_url or os.getenv("S3_ENDPOINT_URL") or os.getenv("AWS_ENDPOINT_URL")
-        if endpoint:
+        # endpoint = endpoint_url or os.getenv("S3_ENDPOINT_URL") or os.getenv("AWS_ENDPOINT_URL")
+        if endpoint := os.getenv("S3_ENDPOINT_URL"):
             client_kwargs["endpoint_url"] = endpoint
             # MinIO local (không có DNS wildcard cho virtual-hosted-style)
             # thường cần path-style addressing để connect được đúng bucket.
