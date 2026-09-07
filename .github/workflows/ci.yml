@@ -1,0 +1,89 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-check:
+    name: Code Quality & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run Ruff Lint Check
+        run: uv run ruff check
+
+  unit-tests:
+    name: Automated Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run Pytest Suite
+        run: uv run pytest
+
+  dbt-validation:
+    name: dbt Model Compilation
+    runs-on: ubuntu-latest
+    env:
+      S3_BUCKET_NAME: "test-bucket"
+      AWS_ACCESS_KEY_ID: "dummy-key"
+      AWS_SECRET_ACCESS_KEY: "dummy-secret"
+      AWS_DEFAULT_REGION: "ap-southeast-1"
+      DUCKDB_PATH: "warehouse/crypto.duckdb"
+      DUCKDB_S3_REGION: "ap-southeast-1"
+      DUCKDB_S3_ENDPOINT: "localhost:9000"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Install dbt dependencies
+        run: uv run dbt deps --project-dir dbt/crypto_dwh --profiles-dir dbt/crypto_dwh
+
+      - name: Compile dbt DAG & Models
+        run: uv run dbt compile --project-dir dbt/crypto_dwh --profiles-dir dbt/crypto_dwh --target dev

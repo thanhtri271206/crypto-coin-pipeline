@@ -60,6 +60,7 @@ data/
 storage/
 local_data/
 raw_data/
+crypto_raw_data/
 minio_data/
 minio-data/
 .minio.sys/
@@ -75,12 +76,18 @@ dbt_packages/
 **/dbt_packages/
 dbt_modules/
 **/dbt_modules/
-profiles.yml
-**/profiles.yml
+# Allow dbt/crypto_dwh/profiles.yml because it uses Jinja env_var (no raw secrets)
+!dbt/crypto_dwh/profiles.yml
 .user.yml
 **/.user.yml
 dbt.log
 **/dbt.log
+
+# ------------------------------------------------------------------------------
+# 3.1 AI Agents & Local Assistant caches
+# ------------------------------------------------------------------------------
+.agent/
+
 
 # ------------------------------------------------------------------------------
 # 4. Apache Airflow & Orchestration
