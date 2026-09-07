@@ -5,7 +5,7 @@
 ) }}
 
 select
-    {{ dbt_utils.generate_surrogate_key(['coin_id', 'fetched_at']) }} as snapshot_id,
+    {{ dbt_utils.generate_surrogate_key(['coin_id', 'api_last_updated']) }} as snapshot_id,
     coin_id,
     current_price,
     market_cap,
@@ -24,7 +24,6 @@ select
 from {{ ref('int_coins_markets_dedup') }}
 
 {% if is_incremental() %}
--- Process only fetches newer than the latest row already in the table.
--- This avoids a full scan of int_coins_markets_dedup on every run.
-where fetched_at > (select max(fetched_at) from {{ this }})
+-- Lookback 3 days on api_last_updated to handle backfills/re-runs safely with delete+insert
+where api_last_updated >= (select max(api_last_updated) - interval '3 days' from {{ this }})
 {% endif %}

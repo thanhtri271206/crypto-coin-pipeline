@@ -2,7 +2,7 @@ with ranked as (
     select
         *,
         row_number() over (
-            partition by coin_id, fetched_at order by fetched_at desc
+            partition by coin_id, api_last_updated order by fetched_at desc
         ) as rn
     from {{ ref('stg_coins_markets') }}
 )

@@ -24,7 +24,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 select
-    {{ dbt_utils.generate_surrogate_key(['fetched_at']) }} as snapshot_id,
+    {{ dbt_utils.generate_surrogate_key(['api_last_updated']) }} as snapshot_id,
     active_cryptocurrencies,
     markets,
     total_market_cap_usd,
@@ -39,9 +39,7 @@ select
 from {{ ref('int_global_market_dedup') }}
 
 {% if is_incremental() %}
--- Lookback 1 giờ: reprocess các fetch trong window gần nhất để handle
--- trường hợp fetch bị fail và không được lưu ở lần chạy trước.
--- delete+insert theo snapshot_id đảm bảo không duplicate.
-where fetched_at >= (select max(fetched_at) - interval 1 hour from {{ this }})
+-- Lookback window on api_last_updated for idempotent delete+insert
+where api_last_updated >= (select max(api_last_updated) - interval '1 day' from {{ this }})
 {% endif %}
 

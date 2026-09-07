@@ -34,13 +34,13 @@
 
 with latest_snapshot as (
     select *,
-        row_number() over (partition by coin_id order by fetched_at desc) as rn
+        row_number() over (partition by coin_id order by api_last_updated desc) as rn
     from {{ ref('fct_market_snapshot_hourly') }}
     qualify rn = 1
 ),
 
 rank_change as (
-    select coin_id, fetched_at, rank_change
+    select coin_id, api_last_updated, rank_change
     from {{ ref('int_coin_rank_change') }}
 ),
 
@@ -63,7 +63,7 @@ select
     l.total_volume / nullif(v.avg_volume_7d, 0) as volume_spike_ratio
 from latest_snapshot l
 left join rank_change rc
-    on l.coin_id = rc.coin_id and l.fetched_at = rc.fetched_at
+    on l.coin_id = rc.coin_id and l.api_last_updated = rc.api_last_updated
 left join volume_baseline v
     -- Join với ngày HÔM QUA (T-1) để dùng baseline không bị ảnh hưởng bởi
     -- volume chưa đầy của ngày hiện tại. NULL trong ngày đầu pipeline.

@@ -1,0 +1,55 @@
+crypto_dwh:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'warehouse/crypto.duckdb') }}"
+
+      # httpfs = extension bắt buộc để DuckDB đọc được s3://... (kể cả MinIO,
+      # vì MinIO tương thích S3 API). dbt-duckdb tự INSTALL + LOAD extension
+      # này khi mở connection, không cần làm gì thêm thủ công.
+      extensions:
+        - httpfs
+
+      settings:
+        s3_region: "{{ env_var('DUCKDB_S3_REGION', 'ap-southeast-1') }}"
+        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+
+        # QUAN TRỌNG (3 dòng dưới đây là phần MinIO cần mà AWS S3 thật
+        # không cần / dùng default khác):
+        # - s3_endpoint: host:port thuần, KHÔNG có "http://" ở đầu.
+        # - s3_use_ssl=false: MinIO local chạy HTTP, không phải HTTPS.
+        # - s3_url_style=path: giống lý do đã áp dụng cho boto3 ở
+        #   s3_writer.py (addressing_style="path") — MinIO cần path-style,
+        #   không phải virtual-hosted-style mặc định của AWS S3.
+        s3_endpoint: "{{ env_var('DUCKDB_S3_ENDPOINT', 'localhost:9000') }}"
+        s3_use_ssl: "false"
+        s3_url_style: "path"
+
+  # target riêng khi deploy lên AWS S3 thật (không phải MinIO) — chỉ cần
+  # đổi endpoint/ssl/url_style, không cần sửa gì khác trong models.
+    prod:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH') }}"
+      extensions: [httpfs]
+      settings:
+        s3_region: "{{ env_var('AWS_DEFAULT_REGION') }}"
+        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+        s3_endpoint: ""
+        s3_use_ssl: "true"
+        s3_url_style: "vhost"
+    
+    motherduck:
+      type: duckdb
+      path: "md:crypto_dwh"
+      token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
+      extensions: [httpfs]
+      settings:
+        s3_region: "{{ env_var('AWS_DEFAULT_REGION') }}"
+        s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"
+        s3_secret_access_key: "{{ env_var('AWS_SECRET_ACCESS_KEY') }}"
+        s3_endpoint: ""
+        s3_use_ssl: "true"
+        s3_url_style: "vhost"

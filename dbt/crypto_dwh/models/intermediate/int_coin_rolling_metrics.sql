@@ -67,7 +67,7 @@ volatility  as (
         stddev_samp(daily_return) over (
             partition by coin_id order by snapshot_date
             range between interval '29 days' preceding and current row
-        ) as volatility_30d,
+        ) as volatility_30d
     from 
         daily
 ),

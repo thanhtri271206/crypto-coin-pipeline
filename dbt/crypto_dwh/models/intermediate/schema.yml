@@ -1,4 +1,4 @@
-﻿version: 2
+version: 2
 
 models:
 
@@ -74,7 +74,7 @@ models:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - coin_id
-            - fetched_at
+            - api_last_updated
 
   # ─────────────────────────────────────────────────────────────────────────────
 
@@ -85,11 +85,15 @@ models:
       Grain: 1 dong = 1 lan fetch /global (fetched_at duy nhat).
       Nguon truc tiep cho fct_global_market_snapshot.
     columns:
-      - name: fetched_at
-        description: Timestamp lan pipeline fetch /global (UTC) - unique sau dedup
+      - name: api_last_updated
+        description: Timestamp CoinGecko update /global (UTC) - unique sau dedup
         data_tests:
           - not_null
           - unique
+      - name: fetched_at
+        description: Timestamp lan pipeline fetch /global (UTC)
+        data_tests:
+          - not_null
       - name: total_market_cap_usd
         description: >
           Tong market cap toan thi truong (USD). Luon duong.
@@ -214,7 +218,7 @@ models:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - coin_id
-            - fetched_at
+            - api_last_updated
 
   # ─────────────────────────────────────────────────────────────────────────────
 

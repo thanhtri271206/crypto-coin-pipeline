@@ -20,6 +20,19 @@ sources:
       hive_partitioned: true
       partitions: [date, fetched_at]
       source_api: "CoinGecko /coins/markets"
+      tier: raw
+      governance: public
+      owner: data_engineering
+    # Freshness gate: warn sau 3 giờ không có data mới, error sau 6 giờ.
+    # Airflow sẽ chạy `dbt source freshness` trước `dbt build` để phát hiện sớm.
+    freshness:
+      warn_after: {count: 3, period: hour}
+      error_after: {count: 6, period: hour}
+    # fetched_at KHÔNG phải column thực trong raw source — nó là Hive partition
+    # được encode trong tên file (fetched_at=2026-09-07T14-00-00Z.json).
+    # dbt source freshness query trực tiếp external_location, không qua staging,
+    # nên phải dùng expression SQL parse từ `filename` column (do filename=true).
+    loaded_at_field: "strptime(regexp_extract(filename, 'fetched_at=([^/]+)\\.json', 1), '%Y-%m-%dT%H-%M-%SZ')"
 
     tables:
       - name: coins_markets
@@ -81,6 +94,13 @@ sources:
       hive_partitioned: true
       partitions: [coin_id (folder), date, fetched_at]
       source_api: "CoinGecko /coins/{id}"
+      tier: raw
+      governance: public
+      owner: data_engineering
+    freshness:
+      warn_after: {count: 8, period: day}
+      error_after: {count: 14, period: day}
+    loaded_at_field: "strptime(regexp_extract(filename, 'fetched_at=([^/]+)\\.json', 1), '%Y-%m-%dT%H-%M-%SZ')"
 
     tables:
       - name: coins_metadata
@@ -189,6 +209,13 @@ sources:
       hive_partitioned: true
       partitions: [coin_id (folder), date, fetched_at]
       source_api: "CoinGecko /coins/{id}/market_chart"
+      tier: raw
+      governance: public
+      owner: data_engineering
+    freshness:
+      warn_after: {count: 26, period: hour}
+      error_after: {count: 50, period: hour}
+    loaded_at_field: "strptime(regexp_extract(filename, 'fetched_at=([^/]+)\\.json', 1), '%Y-%m-%dT%H-%M-%SZ')"
 
     tables:
       - name: market_chart
@@ -229,6 +256,13 @@ sources:
       hive_partitioned: true
       partitions: [date, fetched_at]
       source_api: "CoinGecko /global"
+      tier: raw
+      governance: public
+      owner: data_engineering
+    freshness:
+      warn_after: {count: 3, period: hour}
+      error_after: {count: 6, period: hour}
+    loaded_at_field: "strptime(regexp_extract(filename, 'fetched_at=([^/]+)\\.json', 1), '%Y-%m-%dT%H-%M-%SZ')"
 
     tables:
       - name: global

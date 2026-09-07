@@ -1,7 +1,7 @@
 with ranked as (
     select
         *,
-        row_number() over (partition by fetched_at order by fetched_at desc) as rn
+        row_number() over (partition by api_last_updated order by fetched_at desc) as rn
     from {{ ref('stg_global') }}
 )
 select

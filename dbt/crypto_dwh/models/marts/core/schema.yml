@@ -151,7 +151,7 @@ models:
   - name: fct_market_snapshot_hourly
     description: >
       Fact table chứa snapshot giá và market data theo từng lần fetch của pipeline.
-      Grain: 1 dòng = 1 coin tại 1 lần fetch (coin_id, fetched_at).
+      Grain: 1 dòng = 1 coin tại 1 thời điểm cập nhật của API (coin_id, api_last_updated).
       Nguồn: int_coins_markets_dedup (đã dedup để xử lý trường hợp pipeline re-run).
     config:
       contract:
@@ -159,7 +159,7 @@ models:
       on_schema_change: fail
     columns:
       - name: snapshot_id
-        description: Surrogate key — hash(coin_id, fetched_at). Primary key của fact table.
+        description: Surrogate key — hash(coin_id, api_last_updated). Primary key của fact table.
         data_type: varchar
         data_tests:
           - not_null
@@ -232,6 +232,11 @@ models:
         data_type: timestamp
         data_tests:
           - not_null
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - coin_id
+            - api_last_updated
 
   # ───────────────────────────────────────────────────────────────────────────
 

@@ -31,17 +31,34 @@ clean-targets:         # directories to be removed by `dbt clean`
 # files using the `{{ config(...) }}` macro.
 models:
   crypto_dwh:
-    # Config indicated by + and applies to all files under models/example/
     staging:
       +materialized: view
       +schema: staging
+      +tags: ["tier:silver", "layer:staging"]
+      +meta:
+        tier: silver
+        layer: staging
+        governance: PII_free
+        owner: data_engineering
 
     intermediate:
       +materialized: view
       +schema: intermediate
+      +tags: ["tier:silver", "layer:intermediate"]
+      +meta:
+        tier: silver
+        layer: intermediate
+        governance: PII_free
+        owner: data_engineering
 
     marts:
       +materialized: table
+      +tags: ["tier:gold", "layer:marts"]
+      +meta:
+        tier: gold
+        layer: marts
+        governance: PII_free
+        owner: data_engineering
       core:
         +schema: core
       market_health:
