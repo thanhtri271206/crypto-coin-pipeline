@@ -1,12 +1,13 @@
 import asyncio
 from datetime import timedelta
 from typing import cast
-import pendulum
 
+import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
-from ingestion import schemas
+from utils.alerting import airflow_task_failure_callback, airflow_task_retry_callback
+
 from ingestion.coingecko_client import CoinGeckoClient
 from ingestion.config import COIN_IDS
 from ingestion.s3_writer import S3Writer
@@ -14,6 +15,8 @@ from ingestion.s3_writer import S3Writer
 DEFAULT_TASK_KWARGS = {
     "retries": 3,
     "retry_delay": timedelta(seconds=30),
+    "on_failure_callback": airflow_task_failure_callback,
+    "on_retry_callback": airflow_task_retry_callback,
 }
 
 # Endpoint: https://api.coingecko.com/api/v3/coins/{id}/market_chart
@@ -72,4 +75,3 @@ with DAG(
     chart_payloads = fetch_market_chart_raw.expand(coin_id=COIN_IDS)
     s3_keys = upload_market_chart_to_s3.expand(payload=chart_payloads)
     validate_market_chart.expand(s3_key=s3_keys)
-

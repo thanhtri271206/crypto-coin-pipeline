@@ -1,13 +1,14 @@
 import asyncio
 from datetime import timedelta
 from typing import cast
-import pendulum
 
+import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
 from airflow.providers.standard.operators.trigger_dagrun import TriggerDagRunOperator
-from ingestion import schemas
+from utils.alerting import airflow_task_failure_callback, airflow_task_retry_callback
+
 from ingestion.coingecko_client import CoinGeckoClient
 from ingestion.config import COIN_IDS_STR
 from ingestion.s3_writer import S3Writer
@@ -15,6 +16,8 @@ from ingestion.s3_writer import S3Writer
 DEFAULT_TASK_KWARGS = {
     "retries": 3,
     "retry_delay": timedelta(seconds=30),
+    "on_failure_callback": airflow_task_failure_callback,
+    "on_retry_callback": airflow_task_retry_callback,
 }
 
 with DAG(
@@ -93,20 +96,18 @@ with DAG(
         CoinGeckoClient.validate_global_market_data(raw_data)
         return {"s3_key": s3_key, "status": "valid"}
 
-    trigger_transform=TriggerDagRunOperator(
-        task_id="trigger_transform",
-        trigger_dag_id="transform_dag",
-        wait_for_completion=False
+    trigger_transform = TriggerDagRunOperator(
+        task_id="trigger_transform", trigger_dag_id="transform_dag", wait_for_completion=False
     )
 
     # Flow 1: coins/markets (fetch -> upload -> validate)
     markets_data = fetch_markets_raw()
     markets_s3_key = upload_markets_to_s3(raw_data=markets_data)
-    validate_market_data(s3_key=markets_s3_key)
+    val_markets = validate_market_data(s3_key=markets_s3_key)
 
     # Flow 2: global (fetch -> upload -> validate)
     global_data = fetch_global_raw()
     global_s3_key = upload_global_to_s3(raw_data=global_data)
-    validate_global_data(s3_key=global_s3_key)
+    val_global = validate_global_data(s3_key=global_s3_key)
 
-    [markets_s3_key, global_s3_key] >> trigger_transform
+    [val_markets, val_global] >> trigger_transform

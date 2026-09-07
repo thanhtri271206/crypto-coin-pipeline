@@ -1,12 +1,13 @@
 import asyncio
 from datetime import timedelta
 from typing import cast
-import pendulum
 
+import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
-from ingestion import schemas
+from utils.alerting import airflow_task_failure_callback, airflow_task_retry_callback
+
 from ingestion.coingecko_client import CoinGeckoClient
 from ingestion.config import COIN_IDS
 from ingestion.s3_writer import S3Writer
@@ -14,6 +15,8 @@ from ingestion.s3_writer import S3Writer
 DEFAULT_TASK_KWARGS = {
     "retries": 3,
     "retry_delay": timedelta(seconds=30),
+    "on_failure_callback": airflow_task_failure_callback,
+    "on_retry_callback": airflow_task_retry_callback,
 }
 
 with DAG(
@@ -34,6 +37,7 @@ with DAG(
     @task(**DEFAULT_TASK_KWARGS)
     def fetch_coin_metadata_raw(coin_id: str) -> dict:
         """Task 1: Fetch raw metadata for a single coin and wrap payload with coin_id."""
+
         async def _fetch():
             async with CoinGeckoClient() as client:
                 raw_data = await client.fetch_coin_metadata_raw(id=coin_id)

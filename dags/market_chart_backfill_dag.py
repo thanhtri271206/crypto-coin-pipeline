@@ -1,13 +1,13 @@
 import asyncio
-from datetime import timedelta
 import logging
-import pendulum
-from pydantic import ValidationError
+from datetime import timedelta
 
+import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
-from ingestion import schemas
+from pydantic import ValidationError
+
 from ingestion.coingecko_client import CoinGeckoClient
 from ingestion.config import COIN_IDS
 from ingestion.s3_writer import S3Writer
@@ -32,6 +32,7 @@ with DAG(
     @task(**DEFAULT_TASK_KWARGS)
     def fetch_validate_and_upload_market_chart(coin_id: str) -> dict:
         """Fetch raw historical market chart, upload to S3, and validate schema."""
+
         async def _fetch():
             async with CoinGeckoClient() as client:
                 return await client.fetch_coin_market_chart_raw(id=coin_id, days="365")
