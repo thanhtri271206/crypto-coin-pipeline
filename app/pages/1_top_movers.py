@@ -25,24 +25,7 @@ import streamlit as st
 from app import charts, theme
 from app.queries import get_top_movers
 
-# ─── Shared CSS ──────────────────────────────────────────────
-st.markdown(
-    """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-[data-testid="metric-container"] {
-    background-color: #161B22; border: 1px solid #30363D;
-    border-radius: 10px; padding: 12px 16px;
-}
-[data-testid="metric-container"] label { font-size: 11px !important; color: #8B949E !important; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
-[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 16px !important; font-weight: 700; color: #E6EDF3 !important; }
-[data-testid="stMetricDelta"] { font-size: 12px !important; font-weight: 600; }
-section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+theme.apply_custom_css()
 
 with st.sidebar:
     st.markdown("## 📊 Crypto Dashboard")
@@ -57,8 +40,10 @@ st.markdown("---")
 # ─── Load data ────────────────────────────────────────────────────────────
 df_raw = get_top_movers()
 
-if df_raw.empty:
-    st.error("⚠️ Chưa có dữ liệu. Pipeline chưa chạy hoặc top_movers_mart rỗng.")
+if df_raw is None or df_raw.empty or "coin_id" not in df_raw.columns:
+    st.warning(
+        "⚠️ Chưa có dữ liệu hoặc pipeline đang đồng bộ top_movers_mart. Vui lòng bấm Rerun sau giây lát."
+    )
     st.stop()
 
 # Chuẩn bị display names
@@ -97,7 +82,7 @@ with tab24h:
         fig = charts.gainers_losers_bar(
             df_no_stable, "price_change_percentage_24h", "Price Change — 24h (%)"
         )
-        st.plotly_chart(fig, use_container_width=True, key="bar_24h")
+        st.plotly_chart(fig, width="stretch", key="bar_24h")
 
     with col_table:
         df_24h = df_no_stable[
@@ -135,7 +120,7 @@ with tab24h:
                 }
             )
         )
-        st.dataframe(styled, use_container_width=True, hide_index=True, height=320)
+        st.dataframe(styled, width="stretch", hide_index=True, height=320)
 
 with tab7d:
     col_chart7, col_table7 = st.columns([2, 3])
@@ -149,7 +134,7 @@ with tab7d:
             fig7 = charts.gainers_losers_bar(
                 df_7d_avail, "price_change_percentage_7d_in_currency", "Price Change — 7 Days (%)"
             )
-            st.plotly_chart(fig7, use_container_width=True, key="bar_7d")
+            st.plotly_chart(fig7, width="stretch", key="bar_7d")
 
     with col_table7:
         df_t7 = df_no_stable[
@@ -163,7 +148,7 @@ with tab7d:
                 "Change 7d %": lambda x: f"{x:+.2f}%" if pd.notna(x) else "N/A",
             }
         )
-        st.dataframe(styled7, use_container_width=True, hide_index=True, height=320)
+        st.dataframe(styled7, width="stretch", hide_index=True, height=320)
 
 st.markdown("---")
 
@@ -219,7 +204,7 @@ with col_vol1:
             }
         )
     )
-    st.dataframe(styled_vol, use_container_width=True, hide_index=True)
+    st.dataframe(styled_vol, width="stretch", hide_index=True)
 
 with col_vol2:
     if has_spike:
@@ -257,14 +242,13 @@ st.subheader("🔬 Volume Spike vs. Price Change — Insight #1")
 
 if has_spike:
     fig_scatter = charts.volume_spike_scatter(df_no_stable)
-    st.plotly_chart(fig_scatter, use_container_width=True, key="vol_scatter")
+    st.plotly_chart(fig_scatter, width="stretch", key="vol_scatter")
     st.caption(
         "**Cách đọc**: Góc phải trên = Volume cao + Giá tăng (breakout). "
         "Góc trái trên = Volume cao nhưng Giá không tăng (possible distribution). "
         "Đường ngang vàng = threshold 2× volume bình thường."
     )
 else:
-    charts._empty_fig
     st.info(
         "📊 **Volume Spike Scatter** cần `avg_volume_7d` từ baseline ≥7 ngày.\n\n"
         "Hiện tại pipeline chưa đủ lịch sử. Chart này sẽ tự động xuất hiện khi có data."
@@ -316,4 +300,4 @@ styled_rank = (
         }
     )
 )
-st.dataframe(styled_rank, use_container_width=True, hide_index=True)
+st.dataframe(styled_rank, width="stretch", hide_index=True)

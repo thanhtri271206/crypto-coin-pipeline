@@ -22,6 +22,19 @@ TTL_DAILY = 3600  # 1 giờ
 TTL_STATIC = 86400  # 24 giờ
 
 
+def _safe_query(sql: str, params: list | None = None) -> pd.DataFrame:
+    """Execute SQL safely against DuckDB connection using a thread-local cursor; return empty DataFrame on error."""
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        if params is not None:
+            return cur.execute(sql, params).fetchdf()
+        return cur.execute(sql).fetchdf()
+    except Exception as e:
+        st.warning(f"⚠️ Chưa thể tải dữ liệu từ warehouse (pipeline có thể đang cập nhật): {e}")
+        return pd.DataFrame()
+
+
 # ════════════════════════════════════════════════════════════════════════════
 # GROUP 1: Market Health (macro view)
 # ════════════════════════════════════════════════════════════════════════════
@@ -49,7 +62,7 @@ def get_market_overview() -> pd.DataFrame:
         ORDER BY fetched_at DESC
         LIMIT 1
     """
-    return get_conn().execute(sql).fetchdf()
+    return _safe_query(sql)
 
 
 @st.cache_data(ttl=TTL_DAILY)
@@ -70,7 +83,7 @@ def get_market_health_history() -> pd.DataFrame:
         FROM marts.market_health_mart
         ORDER BY fetched_at ASC
     """
-    return get_conn().execute(sql).fetchdf()
+    return _safe_query(sql)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -101,7 +114,7 @@ def get_top_movers() -> pd.DataFrame:
         FROM marts.top_movers_mart
         ORDER BY market_cap_rank ASC
     """
-    return get_conn().execute(sql).fetchdf()
+    return _safe_query(sql)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -130,7 +143,7 @@ def get_coin_performance_latest() -> pd.DataFrame:
         QUALIFY ROW_NUMBER() OVER (PARTITION BY coin_id ORDER BY snapshot_date DESC) = 1
         ORDER BY coin_id
     """
-    return get_conn().execute(sql).fetchdf()
+    return _safe_query(sql)
 
 
 @st.cache_data(ttl=TTL_DAILY)
@@ -153,7 +166,7 @@ def get_coin_performance_history(coin_id: str) -> pd.DataFrame:
         WHERE coin_id = ?
         ORDER BY snapshot_date ASC
     """
-    return get_conn().execute(sql, [coin_id]).fetchdf()
+    return _safe_query(sql, [coin_id])
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -182,7 +195,7 @@ def get_daily_prices(coin_id: str | None = None) -> pd.DataFrame:
             WHERE coin_id = ?
             ORDER BY snapshot_date ASC
         """
-        return get_conn().execute(sql, [coin_id]).fetchdf()
+        return _safe_query(sql, [coin_id])
     else:
         sql = """
             SELECT
@@ -197,7 +210,7 @@ def get_daily_prices(coin_id: str | None = None) -> pd.DataFrame:
             FROM core.fct_market_snapshot_daily
             ORDER BY snapshot_date ASC, coin_id
         """
-        return get_conn().execute(sql).fetchdf()
+        return _safe_query(sql)
 
 
 @st.cache_data(ttl=TTL_REALTIME)
@@ -222,7 +235,7 @@ def get_hourly_prices(coin_id: str | None = None) -> pd.DataFrame:
             WHERE coin_id = ?
             ORDER BY fetched_at ASC
         """
-        return get_conn().execute(sql, [coin_id]).fetchdf()
+        return _safe_query(sql, [coin_id])
     else:
         sql = """
             SELECT
@@ -236,7 +249,7 @@ def get_hourly_prices(coin_id: str | None = None) -> pd.DataFrame:
             FROM core.fct_market_snapshot_hourly
             ORDER BY fetched_at ASC, coin_id
         """
-        return get_conn().execute(sql).fetchdf()
+        return _safe_query(sql)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -262,7 +275,7 @@ def get_coin_list() -> pd.DataFrame:
         FROM core.dim_coin
         ORDER BY market_cap_rank_static ASC NULLS LAST
     """
-    return get_conn().execute(sql).fetchdf()
+    return _safe_query(sql)
 
 
 @st.cache_data(ttl=TTL_STATIC)
@@ -283,7 +296,7 @@ def get_coin_metadata(coin_id: str) -> pd.DataFrame:
         WHERE coin_id = ?
         LIMIT 1
     """
-    return get_conn().execute(sql, [coin_id]).fetchdf()
+    return _safe_query(sql, [coin_id])
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -317,8 +330,8 @@ def get_normalized_prices(coin_ids: list[str] | None = None) -> pd.DataFrame:
             snapshot_date,
             close,
             base_price,
-            CASE WHEN base_price > 0 
-                 THEN (close / base_price) * 100 
+            CASE WHEN base_price > 0
+                 THEN (close / base_price) * 100
                  ELSE NULL END AS normalized_price
         FROM base
         ORDER BY snapshot_date ASC, coin_id
@@ -327,10 +340,10 @@ def get_normalized_prices(coin_ids: list[str] | None = None) -> pd.DataFrame:
         placeholders = ", ".join("?" * len(coin_ids))
         where = f"WHERE coin_id IN ({placeholders})"
         sql_final = sql.format(where_clause=where)
-        return get_conn().execute(sql_final, coin_ids).fetchdf()
+        return _safe_query(sql_final, coin_ids)
     else:
         sql_final = sql.format(where_clause="")
-        return get_conn().execute(sql_final).fetchdf()
+        return _safe_query(sql_final)
 
 
 @st.cache_data(ttl=TTL_DAILY)
@@ -344,7 +357,87 @@ def get_daily_returns_wide() -> pd.DataFrame:
         FROM core.fct_market_snapshot_daily
         ORDER BY snapshot_date ASC
     """
-    df = get_conn().execute(sql).fetchdf()
+    df = _safe_query(sql)
     if df.empty:
         return df
     return df.pivot(index="snapshot_date", columns="coin_id", values="daily_return")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# GROUP 7: Data Pipeline & Warehouse Observability
+# ════════════════════════════════════════════════════════════════════════════
+
+
+@st.cache_data(ttl=TTL_REALTIME)
+def get_warehouse_inventory() -> pd.DataFrame:
+    """
+    Thống kê động số lượng records của các bảng trong Data Warehouse
+    phân theo kiến trúc Medallion (Core / Silver và Marts / Gold).
+    """
+    sql = """
+        SELECT
+            'core.dim_coin' AS table_name,
+            'Core (Silver)' AS layer,
+            'Metadata 10 đồng coins' AS description,
+            '1 row / coin' AS grain,
+            count(*) AS row_count
+        FROM core.dim_coin
+        UNION ALL
+        SELECT
+            'core.dim_time',
+            'Core (Silver)',
+            'Date dimension calendar',
+            '1 row / ngày',
+            count(*)
+        FROM core.dim_time
+        UNION ALL
+        SELECT
+            'core.fct_market_snapshot_hourly',
+            'Core (Silver)',
+            'Hourly price & market snapshots',
+            '1 row / coin / giờ',
+            count(*)
+        FROM core.fct_market_snapshot_hourly
+        UNION ALL
+        SELECT
+            'core.fct_market_snapshot_daily',
+            'Core (Silver)',
+            'Daily OHLCV & volume history',
+            '1 row / coin / ngày',
+            count(*)
+        FROM core.fct_market_snapshot_daily
+        UNION ALL
+        SELECT
+            'core.fct_global_market_snapshot',
+            'Core (Silver)',
+            'Global market capitalization & dominance',
+            '1 row / snapshot',
+            count(*)
+        FROM core.fct_global_market_snapshot
+        UNION ALL
+        SELECT
+            'marts.market_health_mart',
+            'Marts (Gold)',
+            'Macro market health KPIs & trend',
+            '1 row / snapshot',
+            count(*)
+        FROM marts.market_health_mart
+        UNION ALL
+        SELECT
+            'marts.top_movers_mart',
+            'Marts (Gold)',
+            'Latest price change & volume spikes',
+            '1 row / coin (latest)',
+            count(*)
+        FROM marts.top_movers_mart
+        UNION ALL
+        SELECT
+            'marts.coin_performance_mart',
+            'Marts (Gold)',
+            'Rolling returns (7/30/90d), volatility & drawdown',
+            '1 row / coin / ngày',
+            count(*)
+        FROM marts.coin_performance_mart
+        ORDER BY layer, row_count DESC
+    """
+    return _safe_query(sql)

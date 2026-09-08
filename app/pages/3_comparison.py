@@ -30,23 +30,7 @@ from app.queries import (
     get_normalized_prices,
 )
 
-st.markdown(
-    """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-[data-testid="metric-container"] {
-    background-color: #161B22; border: 1px solid #30363D;
-    border-radius: 10px; padding: 12px 16px;
-}
-[data-testid="metric-container"] label { font-size: 11px !important; color: #8B949E !important; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
-[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 16px !important; font-weight: 700; color: #E6EDF3 !important; }
-[data-testid="stMetricDelta"] { font-size: 12px !important; font-weight: 600; }
-section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+theme.apply_custom_css()
 
 with st.sidebar:
     st.markdown("## 📊 Crypto Dashboard")
@@ -60,8 +44,10 @@ st.markdown("---")
 
 # ─── Coin Multi-Selector ──────────────────────────────────────────────────
 coin_list_df = get_coin_list()
-if coin_list_df.empty:
-    st.error("⚠️ Không có dữ liệu dim_coin.")
+if coin_list_df is None or coin_list_df.empty:
+    st.warning(
+        "⚠️ Chưa có dữ liệu dim_coin hoặc pipeline đang đồng bộ. Vui lòng bấm Rerun sau giây lát."
+    )
     st.stop()
 
 show_stable = st.sidebar.checkbox(
@@ -114,7 +100,7 @@ if df_norm.empty or df_norm["normalized_price"].isna().all():
     st.info("Chưa có đủ data để normalize. Cần ≥1 ngày.")
 else:
     fig_norm = charts.normalized_price_lines(df_norm, selected_coins)
-    st.plotly_chart(fig_norm, use_container_width=True, key="norm_price")
+    st.plotly_chart(fig_norm, width="stretch", key="norm_price")
 
     # Show quick winner/loser if ≥2 days
     latest_norm = df_norm.groupby("coin_id")["normalized_price"].last()
@@ -142,7 +128,7 @@ if df_perf_sel.empty:
     st.info("Performance data chưa có.")
 else:
     fig_bar = charts.rolling_return_grouped_bar(df_perf_sel, selected_coins)
-    st.plotly_chart(fig_bar, use_container_width=True, key="rolling_bar")
+    st.plotly_chart(fig_bar, width="stretch", key="rolling_bar")
 
     # Show performance table
     tbl = df_perf_sel[
@@ -161,7 +147,7 @@ else:
 
     st.dataframe(
         tbl.style.format({"Return 7d": fmt_pct, "Return 30d": fmt_pct, "Return 90d": fmt_pct}),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -191,7 +177,7 @@ if df_perf_sel.empty or df_perf_sel[["volatility_30d", "rolling_return_30d"]].is
     )
 else:
     fig_rr = charts.risk_return_scatter(df_perf_sel)
-    st.plotly_chart(fig_rr, use_container_width=True, key="risk_return")
+    st.plotly_chart(fig_rr, width="stretch", key="risk_return")
 
 st.markdown("---")
 
@@ -214,7 +200,10 @@ def get_drawdown_history(coin_ids: tuple) -> pd.DataFrame:
         WHERE coin_id IN ({})
         ORDER BY snapshot_date, coin_id
     """.format(", ".join(f"'{c}'" for c in coin_ids))
-    return get_conn().execute(sql).fetchdf()
+    try:
+        return get_conn().execute(sql).fetchdf()
+    except Exception:
+        return pd.DataFrame()
 
 
 df_dd = get_drawdown_history(tuple(selected_coins))
@@ -223,7 +212,7 @@ if df_dd.empty or df_dd["drawdown_pct"].isna().all():
     st.info("Drawdown data chưa có.")
 else:
     fig_heatmap = charts.drawdown_heatmap(df_dd)
-    st.plotly_chart(fig_heatmap, use_container_width=True, key="dd_heatmap")
+    st.plotly_chart(fig_heatmap, width="stretch", key="dd_heatmap")
     st.caption(
         "Color scale: 🟢 Xanh = gần đỉnh (drawdown nhỏ) | 🔴 Đỏ = xa đỉnh (drawdown lớn). "
         "Row = coin, Column = ngày."
@@ -242,7 +231,7 @@ Ma trận correlation giữa **daily return** của các coins được chọn.
 - **0.0** (trung tính) = không có quan hệ tuyến tính
 - **-1.0** (xanh đậm) = ngược pha hoàn toàn
 
-⚠️ **Lưu ý**: Với chỉ 2 ngày data, correlation không có ý nghĩa thống kê. 
+⚠️ **Lưu ý**: Với chỉ 2 ngày data, correlation không có ý nghĩa thống kê.
 Cần ít nhất 30 ngày để có correlation đáng tin cậy.
 """)
 
@@ -256,7 +245,7 @@ if not df_corr_wide.empty:
             st.info("Correlation matrix cần ≥2 ngày data (hiện tại: 1 ngày).")
         else:
             fig_corr = charts.correlation_heatmap(df_corr_filtered)
-            st.plotly_chart(fig_corr, use_container_width=True, key="corr_matrix")
+            st.plotly_chart(fig_corr, width="stretch", key="corr_matrix")
     else:
         st.info("Không đủ coins có data để tính correlation.")
 else:

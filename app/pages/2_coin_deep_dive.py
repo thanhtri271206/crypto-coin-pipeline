@@ -11,6 +11,7 @@ Sections:
   6. Volatility KPI cards
 """
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -22,6 +23,10 @@ import pandas as pd
 import streamlit as st
 
 from app import charts, theme
+
+# Reload theme if cached by a long-running Streamlit process before edits
+if not hasattr(theme, "COIN_DESCRIPTIONS_VI"):
+    importlib.reload(theme)
 from app.queries import (
     get_coin_list,
     get_coin_metadata,
@@ -30,23 +35,7 @@ from app.queries import (
     get_hourly_prices,
 )
 
-st.markdown(
-    """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-[data-testid="metric-container"] {
-    background-color: #161B22; border: 1px solid #30363D;
-    border-radius: 10px; padding: 12px 16px;
-}
-[data-testid="metric-container"] label { font-size: 11px !important; color: #8B949E !important; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
-[data-testid="metric-container"] [data-testid="stMetricValue"] { font-size: 16px !important; font-weight: 700; color: #E6EDF3 !important; }
-[data-testid="stMetricDelta"] { font-size: 12px !important; font-weight: 600; }
-section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363D; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
+theme.apply_custom_css()
 
 with st.sidebar:
     st.markdown("## 📊 Crypto Dashboard")
@@ -60,8 +49,10 @@ st.markdown("---")
 
 # ─── Coin Selector ────────────────────────────────────────────────────────
 coin_list_df = get_coin_list()
-if coin_list_df.empty:
-    st.error("⚠️ Không có dữ liệu dim_coin. Pipeline chưa chạy?")
+if coin_list_df is None or coin_list_df.empty:
+    st.warning(
+        "⚠️ Chưa có dữ liệu dim_coin hoặc pipeline đang đồng bộ. Vui lòng bấm Rerun sau giây lát."
+    )
     st.stop()
 
 # Build options: exclude stablecoins mặc định, cho phép opt-in
@@ -94,7 +85,7 @@ coin_label = theme.COIN_NAMES.get(selected_coin, selected_coin)
 
 # ─── Coin Metadata Header ─────────────────────────────────────────────────
 meta = get_coin_metadata(selected_coin)
-if not meta.empty:
+if meta is not None and not meta.empty:
     m = meta.iloc[0]
 
     col_info, col_genesis = st.columns([4, 1])
@@ -114,7 +105,7 @@ df_daily = get_daily_prices(selected_coin)
 df_perf = get_coin_performance_history(selected_coin)
 
 # ─── KPI snapshot ─────────────────────────────────────────────────────────
-if not df_hourly.empty:
+if df_hourly is not None and not df_hourly.empty:
     latest_h = df_hourly.sort_values("fetched_at").iloc[-1]
 
     c1, c2, c3, c4 = st.columns(4)
@@ -150,20 +141,20 @@ st.markdown("---")
 st.subheader("💰 Price History")
 
 # Long-term daily chart — luôn ưu tiên hiện nếu có data (366 ngày backfill)
-if df_daily.shape[0] >= 1:
+if df_daily is not None and df_daily.shape[0] >= 1:
     fig_price = charts.price_line(df_daily, selected_coin, use_hourly=False)
-    st.plotly_chart(fig_price, use_container_width=True, key=f"price_daily_{selected_coin}")
+    st.plotly_chart(fig_price, width="stretch", key=f"price_daily_{selected_coin}")
     st.caption(f"Granularity: daily close ({df_daily.shape[0]} ngày)")
 else:
     st.info(f"📊 Chưa có price data cho {coin_label}")
 
 # Intraday hourly chart — chỉ hiện khi pipeline đã chạy đủ lâu để có nhiều ngày hourly
-if df_hourly.shape[0] >= 2:
+if df_hourly is not None and df_hourly.shape[0] >= 2:
     with st.expander(
         f"🔍 Intraday View — Hourly Snapshots ({df_hourly.shape[0]} points)", expanded=False
     ):
         fig_hourly = charts.price_line(df_hourly, selected_coin, use_hourly=True)
-        st.plotly_chart(fig_hourly, use_container_width=True, key=f"price_hourly_{selected_coin}")
+        st.plotly_chart(fig_hourly, width="stretch", key=f"price_hourly_{selected_coin}")
         st.caption(
             "Granularity: hourly snapshots từ pipeline. "
             "Khi pipeline chạy lâu hơn, chart này sẽ cover nhiều ngày hơn."
@@ -173,9 +164,9 @@ if df_hourly.shape[0] >= 2:
 st.markdown("---")
 st.subheader("📊 Daily Return")
 
-if not df_daily.empty:
+if df_daily is not None and not df_daily.empty:
     fig_ret = charts.daily_return_bar(df_daily, selected_coin)
-    st.plotly_chart(fig_ret, use_container_width=True, key=f"return_{selected_coin}")
+    st.plotly_chart(fig_ret, width="stretch", key=f"return_{selected_coin}")
     st.caption(
         "Daily Return = (Close - Open) / Open trong ngày. "
         "🟢 Xanh = dương (close > open) | 🔴 Đỏ = âm (close < open)"
@@ -200,9 +191,9 @@ with st.expander("ℹ️ Rolling Return là gì?"):
 | 90-Day | ≥90 ngày data | Long-term performance |
 """)
 
-if not df_perf.empty:
+if df_perf is not None and not df_perf.empty:
     fig_rolling = charts.rolling_return_lines(df_perf, selected_coin)
-    st.plotly_chart(fig_rolling, use_container_width=True, key=f"rolling_{selected_coin}")
+    st.plotly_chart(fig_rolling, width="stretch", key=f"rolling_{selected_coin}")
 else:
     st.info("Rolling return data chưa có. Cần ít nhất 7 ngày data sau khi pipeline chạy liên tục.")
 
@@ -261,11 +252,11 @@ st.warning(
     r"Ví dụ: Bitcoin ATH lịch sử ~\$109K nhưng pipeline bắt đầu tại ~\$64K → drawdown hiện tại từ \$64K."
 )
 
-if not df_perf.empty:
+if df_perf is not None and not df_perf.empty:
     # Tìm ngày bắt đầu pipeline
     pipeline_start = str(df_perf["snapshot_date"].min())[:10] if not df_perf.empty else ""
     fig_dd = charts.drawdown_area(df_perf, selected_coin, pipeline_start)
-    st.plotly_chart(fig_dd, use_container_width=True, key=f"drawdown_{selected_coin}")
+    st.plotly_chart(fig_dd, width="stretch", key=f"drawdown_{selected_coin}")
 
     latest_dd = df_perf.sort_values("snapshot_date").iloc[-1]
     dd_pct = latest_dd.get("drawdown_pct")
@@ -286,7 +277,13 @@ else:
     st.info("Drawdown data chưa có.")
 
 # ─── Coin Description ─────────────────────────────────────────────────────
-if not meta.empty and pd.notna(meta.iloc[0].get("description_en")):
+coin_desc_dict = getattr(theme, "COIN_DESCRIPTIONS_VI", {})
+desc_vi = coin_desc_dict.get(selected_coin)
+if desc_vi:
+    st.markdown("---")
+    with st.expander(f"📄 Về {coin_label}", expanded=True):
+        st.markdown(desc_vi)
+elif meta is not None and not meta.empty and pd.notna(meta.iloc[0].get("description_en")):
     desc = meta.iloc[0]["description_en"]
     if desc and len(desc) > 10:
         st.markdown("---")

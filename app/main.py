@@ -20,70 +20,10 @@ if str(_PROJECT_ROOT) not in sys.path:
 import pandas as pd
 import streamlit as st
 
-from app import charts
+from app import charts, theme
 from app.queries import get_market_health_history, get_market_overview
 
-# ─── Page config ──────────────────────────────────────────────────────────
-
-# ─── Global CSS ───────────────────────────────────────────────────────────
-st.markdown(
-    """
-<style>
-/* Import Inter from Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
-}
-
-/* KPI metric cards */
-[data-testid="metric-container"] {
-    background-color: #161B22;
-    border: 1px solid #30363D;
-    border-radius: 10px;
-    padding: 12px 16px;
-}
-[data-testid="metric-container"] label {
-    font-size: 11px !important;
-    color: #8B949E !important;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-[data-testid="metric-container"] [data-testid="stMetricValue"] {
-    font-size: 16px !important;
-    font-weight: 700;
-    color: #E6EDF3 !important;
-}
-[data-testid="stMetricDelta"] {
-    font-size: 12px !important;
-    font-weight: 600;
-}
-
-/* Sidebar header */
-section[data-testid="stSidebar"] {
-    background-color: #161B22;
-    border-right: 1px solid #30363D;
-}
-
-/* Dividers */
-hr {
-    border-color: #30363D;
-    margin: 12px 0;
-}
-
-/* Streamlit plotly charts – remove default white padding */
-.js-plotly-plot { border-radius: 8px; }
-
-/* Info/warning boxes */
-.stAlert {
-    border-radius: 8px;
-    border: 1px solid #30363D;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+theme.apply_custom_css()
 
 
 # ─── Sidebar navigation label ─────────────────────────────────────────────
@@ -111,10 +51,10 @@ st.markdown("---")
 # ─── Load data ────────────────────────────────────────────────────────────
 overview = get_market_overview()
 
-if overview.empty:
-    st.error(
-        "⚠️ Chưa có dữ liệu trong `market_health_mart`.\n\n"
-        "Hãy chắc chắn rằng pipeline (ingest → dbt transform) đã chạy ít nhất một lần."
+if overview is None or overview.empty:
+    st.warning(
+        "⚠️ Chưa có dữ liệu trong `market_health_mart` hoặc pipeline đang cập nhật.\n\n"
+        "Hãy đảm bảo pipeline (ingest → dbt transform) đã chạy thành công ít nhất một lần, hoặc thử bấm Rerun."
     )
     st.stop()
 
@@ -209,22 +149,22 @@ st.info(f"**Market Regime: {regime_label}**\n\n{regime_desc}")
 # ─── Historical Trend Charts ─────────────────────────────────────────────
 history = get_market_health_history()
 
-if history.shape[0] >= 2:
+if history is not None and history.shape[0] >= 2:
     col_left, col_right = st.columns([3, 2])
 
     with col_left:
         st.subheader("Market Cap Trend")
         fig_mc = charts.market_cap_trend(history)
-        st.plotly_chart(fig_mc, use_container_width=True, key="mc_trend")
+        st.plotly_chart(fig_mc, width="stretch", key="mc_trend")
 
     with col_right:
         st.subheader("BTC & ETH Dominance")
         fig_dom = charts.dominance_area(history)
-        st.plotly_chart(fig_dom, use_container_width=True, key="dominance")
+        st.plotly_chart(fig_dom, width="stretch", key="dominance")
 else:
     st.info(
         "📊 Trend charts sẽ xuất hiện khi pipeline có **≥2 data points** "
-        f"(hiện tại: {history.shape[0]} snapshot(s)). Hãy để pipeline chạy thêm."
+        f"(hiện tại: {history.shape[0] if history is not None else 0} snapshot(s)). Hãy để pipeline chạy thêm."
     )
 
 # ─── ETH Dominance note ──────────────────────────────────────────────────
