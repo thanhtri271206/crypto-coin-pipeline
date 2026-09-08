@@ -16,5 +16,5 @@ select
     top10_market_share_pct,
     market_cap_change_pct_24h,
     volume_change_pct_24h
-from 
+from
     {{ ref('int_market_share') }}

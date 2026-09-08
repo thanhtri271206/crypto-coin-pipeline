@@ -20,7 +20,6 @@ snapshot-paths: ["snapshots"]
 
 clean-targets:         # directories to be removed by `dbt clean`
   - "target"
-  - "dbt_packages"
 
 
 # Configuring models
@@ -67,3 +66,12 @@ models:
         +schema: marts
       coin_performance:
         +schema: marts
+        intermediate:
+          +schema: intermediate
+          +materialized: view
+          +tags: ["tier:silver", "layer:intermediate"]
+          +meta:
+            tier: silver
+            layer: intermediate
+            governance: PII_free
+            owner: data_engineering

@@ -25,9 +25,9 @@ renamed as(
             regexp_extract(filename, 'fetched_at=([^/]+)\.json', 1),
             '%Y-%m-%dT%H-%M-%SZ'
         ) as fetched_at
-    from 
+    from
         source
 )
 
 select * from renamed
-    
+

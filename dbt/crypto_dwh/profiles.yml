@@ -1,5 +1,5 @@
 crypto_dwh:
-  target: dev
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
     dev:
       type: duckdb
@@ -40,7 +40,7 @@ crypto_dwh:
         s3_endpoint: ""
         s3_use_ssl: "true"
         s3_url_style: "vhost"
-    
+
     motherduck:
       type: duckdb
       path: "md:crypto_dwh"

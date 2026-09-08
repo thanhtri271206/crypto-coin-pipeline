@@ -1,13 +1,13 @@
 select
-    snapshot_id, 
-    coin_id, 
-    snapshot_date, 
-    open, 
+    snapshot_id,
+    coin_id,
+    snapshot_date,
+    open,
     high,
-    low, 
+    low,
     close
 from {{ ref('fct_market_snapshot_daily') }}
-where 
+where
     high < open
     or high < close
     or high < low

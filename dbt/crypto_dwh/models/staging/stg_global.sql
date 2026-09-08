@@ -1,10 +1,10 @@
 with source as (
-    select 
+    select
         *
     from {{ source('raw_global', 'global') }}
 ),
 renamed as (
-    select 
+    select
         data.active_cryptocurrencies,
         data.markets,
         data.total_market_cap.usd as total_market_cap_usd,
@@ -19,7 +19,7 @@ renamed as (
             regexp_extract(filename, 'fetched_at=([^/]+)\.json', 1),
             '%Y-%m-%dT%H-%M-%SZ'
         ) as fetched_at
-    from 
+    from
         source
 )
 

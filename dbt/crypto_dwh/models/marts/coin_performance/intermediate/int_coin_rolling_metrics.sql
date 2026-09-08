@@ -33,7 +33,7 @@ with daily as (
         snapshot_date,
         close,
         daily_return
-    from 
+    from
         {{ ref('fct_market_snapshot_daily') }}
 ),
 returns as (
@@ -44,7 +44,7 @@ returns as (
         (d.close - d7.close) / nullif(d7.close, 0) as rolling_return_7d, -- 7 days before
         (d.close - d30.close) / nullif(d30.close, 0) as rolling_return_30d, -- 30 days before
         (d.close - d90.close) / nullif(d90.close, 0) as rolling_return_90d -- 90 days before
-    from 
+    from
         daily as d
     left join daily as d7
         on d.coin_id = d7.coin_id
@@ -56,7 +56,7 @@ returns as (
         on d.coin_id = d90.coin_id
         and d90.snapshot_date = d.snapshot_date - interval 90 day
 ),
-volatility  as (
+volatility as (
     select
         coin_id,
         snapshot_date,
@@ -68,7 +68,7 @@ volatility  as (
             partition by coin_id order by snapshot_date
             range between interval '29 days' preceding and current row
         ) as volatility_30d
-    from 
+    from
         daily
 ),
 -- Drawdown: baseline là đỉnh giá cao nhất từ NGÀY ĐẦU PIPELINE đến hiện tại
@@ -113,8 +113,8 @@ select
     v.volatility_30d,
     dd.drawdown_pct,
     dd.max_drawdown_30d
-from returns r 
-join volatility v 
+from returns r
+join volatility v
     on r.coin_id = v.coin_id and r.snapshot_date = v.snapshot_date
 join drawdown dd
     on r.coin_id = dd.coin_id and r.snapshot_date = dd.snapshot_date
