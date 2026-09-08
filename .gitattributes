@@ -1,0 +1,36 @@
+# ==============================================================================
+# Git Attributes Configuration for crypto-coin-pipeline
+# Ensures cross-platform consistency (Windows host vs Linux Docker containers)
+# ==============================================================================
+
+# Auto-detect text files and normalize line endings to LF on commit
+* text=auto eol=lf
+
+# Explicitly force LF for script, code, and config files (critical for Docker & POSIX)
+*.py text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.sh text eol=lf
+*.cfg text eol=lf
+*.env* text eol=lf
+Dockerfile text eol=lf
+dockerfile text eol=lf
+.gitignore text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+
+# Binary files (preserve bit-for-bit, never touch line endings)
+*.parquet binary
+*.duckdb binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
+*.tar.gz binary
+*.zip binary
