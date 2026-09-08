@@ -372,6 +372,7 @@ name = "crypto-coin-pipeline"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "duckdb" },
     { name = "pandas" },
     { name = "plotly" },
     { name = "python-dotenv" },
@@ -406,6 +407,7 @@ requires-dist = [
     { name = "boto3", marker = "extra == 'storage'", specifier = ">=1.43.70" },
     { name = "dbt-core", marker = "extra == 'warehouse'", specifier = ">=1.12.2" },
     { name = "dbt-duckdb", marker = "extra == 'warehouse'", specifier = ">=1.11.0" },
+    { name = "duckdb", specifier = ">=1.5.5" },
     { name = "duckdb", marker = "extra == 'warehouse'", specifier = ">=1.5.5" },
     { name = "httpx", marker = "extra == 'ingestion'", specifier = ">=0.28.1" },
     { name = "moto", marker = "extra == 'dev'", specifier = ">=5.2.2" },
