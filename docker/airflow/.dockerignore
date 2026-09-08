@@ -1,0 +1,21 @@
+# ==============================================================================
+# Docker Ignore for Airflow Build Context (docker/airflow)
+# Prevents bulky binaries, logs, secrets, and caches from being sent to Docker daemon
+# ==============================================================================
+
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ruff_cache
+.env
+.env.*
+logs/
+warehouse/
+data/
+crypto_raw_data/
+*.duckdb*
+*.parquet

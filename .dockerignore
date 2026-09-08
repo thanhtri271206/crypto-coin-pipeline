@@ -1,0 +1,21 @@
+# ==============================================================================
+# Root Docker Ignore Configuration for crypto-coin-pipeline
+# ==============================================================================
+
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ruff_cache
+.env
+.env.*
+logs/
+warehouse/
+data/
+crypto_raw_data/
+*.duckdb*
+*.parquet
+.agent
