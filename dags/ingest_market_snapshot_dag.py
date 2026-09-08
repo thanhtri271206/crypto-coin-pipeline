@@ -97,7 +97,10 @@ with DAG(
         return {"s3_key": s3_key, "status": "valid"}
 
     trigger_transform = TriggerDagRunOperator(
-        task_id="trigger_transform", trigger_dag_id="transform_dag", wait_for_completion=False
+        task_id="trigger_transform",
+        trigger_dag_id="transform_dag",
+        wait_for_completion=False,
+        **DEFAULT_TASK_KWARGS,
     )
 
     # Flow 1: coins/markets (fetch -> upload -> validate)
