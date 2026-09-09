@@ -1,0 +1,70 @@
+name: Deploy dbt Docs to GitHub Pages
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'dbt/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Ensure target & warehouse directory exists
+        run: mkdir -p warehouse dbt/crypto_dwh/target
+
+      - name: Install dbt packages
+        run: uv run dbt deps --project-dir dbt/crypto_dwh --profiles-dir dbt/crypto_dwh
+
+      - name: Generate dbt Docs
+        env:
+          S3_BUCKET_NAME: "test-bucket"
+          AWS_ACCESS_KEY_ID: "dummy-key"
+          AWS_SECRET_ACCESS_KEY: "dummy-secret"
+          AWS_DEFAULT_REGION: "ap-southeast-1"
+          DUCKDB_PATH: ":memory:"
+          DUCKDB_S3_REGION: "ap-southeast-1"
+          DUCKDB_S3_ENDPOINT: "localhost:9000"
+        run: |
+          uv run dbt docs generate --project-dir dbt/crypto_dwh --profiles-dir dbt/crypto_dwh --target dev
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'dbt/crypto_dwh/target'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
