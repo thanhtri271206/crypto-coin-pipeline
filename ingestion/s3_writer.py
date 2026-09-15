@@ -123,6 +123,32 @@ class S3Writer:
             ContentType="application/json",
         )
 
+    def object_exists(self, key: str) -> bool:
+        """Kiểm tra một object có tồn tại trên S3 không — dùng head_object (không download body).
+
+        Dùng cho idempotent backfill: nếu file đã có thì skip re-fetch API,
+        tránh lãng phí quota CoinGecko Free Tier.
+
+        Returns:
+            True  — object tồn tại
+            False — object không tồn tại (404 / NoSuchKey)
+
+        Raises:
+            ClientError — các lỗi S3 khác (permission denied, network, ...)
+        """
+        try:
+            self.s3_client.head_object(Bucket=self.bucket_name, Key=key)
+            logger.debug(f"Object exists: s3://{self.bucket_name}/{key}")
+            return True
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in ("404", "NoSuchKey"):
+                logger.debug(f"Object not found: s3://{self.bucket_name}/{key}")
+                return False
+            # Lỗi khác (permissions, network...) — raise để caller biết
+            logger.error(f"Unexpected error checking object s3://{self.bucket_name}/{key}: {e}")
+            raise
+
     def read_raw_json(self, key: str) -> dict | list:
         """Đọc và parse JSON file từ S3/MinIO theo key.
 

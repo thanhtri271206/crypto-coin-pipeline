@@ -1,6 +1,8 @@
 import pendulum
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.operators.python import get_current_context
+from airflow.decorators import task
 from utils.alerting import airflow_task_failure_callback, airflow_task_retry_callback
 
 DBT_PROJECT_DIR = "/opt/airflow/dbt/crypto_dwh"
@@ -15,7 +17,11 @@ _TASK_DEFAULTS = {
 
 with DAG(
     dag_id="transform_dag",
-    description="Run dbt transform pipeline: clean → deps → source freshness → build (includes tests)",
+    description=(
+        "Run dbt transform pipeline: clean → deps → source freshness → build (includes tests). "
+        "Hỗ trợ selective reprocessing qua dag_run.conf: "
+        "{\"dbt_selector\": \"stg_market_chart+\"} để chỉ build subset model."
+    ),
     start_date=pendulum.datetime(2026, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
@@ -43,12 +49,50 @@ with DAG(
         on_retry_callback=airflow_task_retry_callback,
     )
 
+    @task(**_TASK_DEFAULTS)
+    def resolve_dbt_build_command() -> str:
+        """Xây dựng lệnh dbt build dựa trên dag_run.conf.
+
+        Selective reprocessing: truyền conf {"dbt_selector": "<selector>"} khi trigger
+        để chỉ rebuild một subset model thay vì toàn bộ pipeline.
+
+        Ví dụ hợp lệ cho dbt_selector:
+          - "stg_market_chart+"        → stg_market_chart và tất cả downstream
+          - "tag:staging"              → tất cả models có tag staging
+          - "stg_market_chart stg_coins_markets" → chạy 2 model cụ thể
+          - (không truyền)             → build toàn bộ (behaviour mặc định)
+
+        Docs: https://docs.getdbt.com/reference/node-selection/syntax
+        """
+        context = get_current_context()
+        conf = (context["dag_run"].conf or {})
+        dbt_selector = conf.get("dbt_selector", "").strip()
+
+        if dbt_selector:
+            cmd = f"{DBT_BIN} build {_DBT_BASE_FLAGS} --select {dbt_selector}"
+            # Ghi log rõ ràng để audit trail trong Airflow task logs
+            import logging
+            logging.getLogger(__name__).info(
+                f"[SELECTIVE BUILD] dbt selector='{dbt_selector}' — chỉ build subset model."
+            )
+        else:
+            cmd = f"{DBT_BIN} build {_DBT_BASE_FLAGS}"
+            import logging
+            logging.getLogger(__name__).info(
+                "[FULL BUILD] Không có dbt_selector trong conf — build toàn bộ pipeline."
+            )
+
+        return cmd
+
+    dbt_build_cmd = resolve_dbt_build_command()
+
     dbt_build = BashOperator(
         task_id="dbt_build",
-        bash_command=f"{DBT_BIN} build {_DBT_BASE_FLAGS}",
+        # Đọc lệnh được resolve từ task trước — hỗ trợ cả full build và selective
+        bash_command="{{ ti.xcom_pull(task_ids='resolve_dbt_build_command') }}",
         **_TASK_DEFAULTS,
     )
 
     # `dbt build` = seed + snapshot + run + test (per node, theo dependency order).
     # Tests đã được chạy nội tại trong dbt_build — không cần `dbt test` riêng.
-    dbt_clean >> dbt_deps >> dbt_source_freshness >> dbt_build
+    dbt_clean >> dbt_deps >> dbt_source_freshness >> dbt_build_cmd >> dbt_build

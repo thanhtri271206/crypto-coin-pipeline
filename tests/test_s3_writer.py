@@ -88,6 +88,70 @@ class TestS3Writer(unittest.TestCase):
             with self.assertRaises(ValueError):
                 S3Writer(bucket_name="")
 
+    @mock_aws
+    def test_object_exists_returns_true_when_file_present(self):
+        """object_exists() trả True nếu key đã có trên S3."""
+        bucket_name = "test-bucket"
+        region_name = "ap-southeast-1"
+
+        s3_client = boto3.client("s3", region_name=region_name)
+        s3_client.create_bucket(
+            Bucket=bucket_name,
+            CreateBucketConfiguration={"LocationConstraint": region_name},
+        )
+
+        writer = S3Writer(bucket_name=bucket_name, region_name=region_name)
+        dt = datetime(2026, 8, 15, 10, 0, 0, tzinfo=UTC)
+
+        # Upload một file trước, sau đó kiểm tra exists
+        key = writer.upload_raw_json("coins/bitcoin/market_chart", {"prices": []}, dt)
+        self.assertTrue(writer.object_exists(key))
+
+    @mock_aws
+    def test_object_exists_returns_false_when_file_absent(self):
+        """object_exists() trả False khi key chưa có trên S3 (404)."""
+        bucket_name = "test-bucket"
+        region_name = "ap-southeast-1"
+
+        s3_client = boto3.client("s3", region_name=region_name)
+        s3_client.create_bucket(
+            Bucket=bucket_name,
+            CreateBucketConfiguration={"LocationConstraint": region_name},
+        )
+
+        writer = S3Writer(bucket_name=bucket_name, region_name=region_name)
+        non_existent_key = "raw/coins/ethereum/market_chart/date=2026-08-15/fetched_at=2026-08-15T10-00-00Z.json"
+        self.assertFalse(writer.object_exists(non_existent_key))
+
+    @mock_aws
+    def test_object_exists_skip_logic_prevents_double_upload(self):
+        """Verify pattern skip-if-exists: exists check trước upload sẽ ngăn re-fetch."""
+        bucket_name = "test-bucket"
+        region_name = "ap-southeast-1"
+
+        s3_client = boto3.client("s3", region_name=region_name)
+        s3_client.create_bucket(
+            Bucket=bucket_name,
+            CreateBucketConfiguration={"LocationConstraint": region_name},
+        )
+
+        writer = S3Writer(bucket_name=bucket_name, region_name=region_name)
+        dt = datetime(2026, 8, 15, 12, 0, 0, tzinfo=UTC)
+        data_v1 = {"prices": [[1000, 50000]]}
+        data_v2 = {"prices": [[1000, 99999]]}  # data khác nếu có re-fetch
+
+        # Upload lần đầu
+        key = writer.upload_raw_json("coins/solana/market_chart", data_v1, dt)
+        self.assertTrue(writer.object_exists(key), "File phải tồn tại sau lần upload đầu")
+
+        # Simulate skip logic: nếu exists → không upload lại
+        if not writer.object_exists(key):
+            writer.upload_raw_json("coins/solana/market_chart", data_v2, dt)
+
+        # Data trên S3 vẫn là data_v1 (không bị ghi đè)
+        read_back = writer.read_raw_json(key)
+        self.assertEqual(read_back, data_v1)
+
 
 if __name__ == "__main__":
     unittest.main()
