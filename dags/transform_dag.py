@@ -8,7 +8,7 @@ from utils.alerting import airflow_task_failure_callback, airflow_task_retry_cal
 DBT_PROJECT_DIR = "/opt/airflow/dbt/crypto_dwh"
 DBT_BIN = "/opt/dbt_venv/bin/dbt"
 
-_DBT_BASE_FLAGS = f"--project-dir {DBT_PROJECT_DIR} --profiles-dir {DBT_PROJECT_DIR}"
+_DBT_BASE_FLAGS = f"--project-dir {DBT_PROJECT_DIR} --profiles-dir {DBT_PROJECT_DIR} --use-colors"
 
 _TASK_DEFAULTS = {
     "on_failure_callback": airflow_task_failure_callback,
