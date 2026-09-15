@@ -38,7 +38,7 @@ with source as (
     -- snapshot_date là Hive partition column (VARCHAR 'YYYY-MM-DD' từ read_json_auto).
     -- Cast về DATE trước khi trừ interval, rồi cast lại VARCHAR để so sánh đúng type.
     where date >= (
-        select (max(snapshot_date)::date - interval '2 days')::varchar
+        select (max(snapshot_date)::date - interval '2 days')
         from {{ this }}
     )
     {% endif %}

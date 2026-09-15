@@ -35,7 +35,7 @@ with source as (
     -- snapshot_date là Hive partition column (VARCHAR 'YYYY-MM-DD').
     -- Lookback 1 ngày: /global chạy hourly, không cần buffer dài.
     where date >= (
-        select (max(snapshot_date)::date - interval '1 day')::varchar
+        select (max(snapshot_date)::date - interval '1 day')
         from {{ this }}
     )
     {% endif %}
