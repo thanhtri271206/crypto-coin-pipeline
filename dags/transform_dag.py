@@ -1,8 +1,8 @@
 import pendulum
 from airflow import DAG
+from airflow.decorators import task
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import get_current_context
-from airflow.decorators import task
 from utils.alerting import airflow_task_failure_callback, airflow_task_retry_callback
 
 DBT_PROJECT_DIR = "/opt/airflow/dbt/crypto_dwh"
