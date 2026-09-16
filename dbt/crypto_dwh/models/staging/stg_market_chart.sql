@@ -1,3 +1,5 @@
+{{ config(materialized='table') }}
+
 with source as (
     select *
     from {{ source('raw_market_chart', 'market_chart') }}

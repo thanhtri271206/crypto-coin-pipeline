@@ -40,6 +40,6 @@ from {{ ref('int_global_market_dedup') }}
 
 {% if is_incremental() %}
 -- Lookback window on api_last_updated for idempotent delete+insert
-where api_last_updated >= (select max(api_last_updated) - interval '1 day' from {{ this }})
+where api_last_updated::timestamp >= (select max(api_last_updated)::timestamp - interval '1 day' from {{ this }})
 {% endif %}
 

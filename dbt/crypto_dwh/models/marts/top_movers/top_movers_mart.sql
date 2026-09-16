@@ -60,7 +60,13 @@ select
     rc.rank_change,
     l.total_volume,
     v.avg_volume_7d,
-    l.total_volume / nullif(v.avg_volume_7d, 0) as volume_spike_ratio
+    -- Sanity Guard: Tỷ lệ volume spike phải nằm trong khoảng hợp lý [0, 50].
+    -- Nếu vượt quá 50 (dấu hiệu outlier bất thường từ API), gán về NULL để bảo vệ dashboard và test.
+    case 
+        when l.total_volume / nullif(v.avg_volume_7d, 0) between 0 and 50 
+        then l.total_volume / nullif(v.avg_volume_7d, 0) 
+        else null 
+    end as volume_spike_ratio
 from latest_snapshot l
 left join rank_change rc
     on l.coin_id = rc.coin_id and l.api_last_updated = rc.api_last_updated

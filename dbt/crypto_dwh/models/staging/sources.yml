@@ -40,9 +40,28 @@ sources:
           Snapshot giá, market cap, volume và các chỉ số thị trường của từng coin
           tại mỗi thời điểm fetch. Mỗi record là một coin trong một lần fetch.
         config:
+          formatter: "oldstyle"
           external_location: >
-            read_json_auto(
+            read_json(
               's3://{{ env_var("S3_BUCKET_NAME") }}/raw/coins/markets/date=*/fetched_at=*.json',
+              columns = {
+                'id':                                     'VARCHAR',
+                'symbol':                                 'VARCHAR',
+                'name':                                   'VARCHAR',
+                'current_price':                          'DOUBLE',
+                'market_cap':                             'DOUBLE',
+                'market_cap_rank':                        'BIGINT',
+                'total_volume':                           'DOUBLE',
+                'high_24h':                               'DOUBLE',
+                'low_24h':                                'DOUBLE',
+                'price_change_24h':                       'DOUBLE',
+                'price_change_percentage_24h':            'DOUBLE',
+                'price_change_percentage_7d_in_currency': 'DOUBLE',
+                'circulating_supply':                     'DOUBLE',
+                'total_supply':                           'DOUBLE',
+                'max_supply':                             'DOUBLE',
+                'last_updated':                           'VARCHAR'
+              },
               hive_partitioning = true,
               filename = true
             )

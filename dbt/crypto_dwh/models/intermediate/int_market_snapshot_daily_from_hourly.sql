@@ -24,7 +24,12 @@ ranked as (
         ) as rn_first,
         row_number() over (
             partition by coin_id, snapshot_date order by fetched_at desc
-        ) as rn_last
+        ) as rn_last,
+        -- Sanity Guard: Ưu tiên chọn snapshot cuối cùng có volume hợp lệ (không bị null do outlier) trong ngày
+        row_number() over (
+            partition by coin_id, snapshot_date
+            order by case when total_volume is not null then 0 else 1 end, fetched_at desc
+        ) as rn_last_valid_volume
     from hourly
 
 )
@@ -36,7 +41,7 @@ select
     max(current_price)                                    as high,
     min(current_price)                                    as low,
     max(case when rn_last = 1 then current_price end)    as close,
-    max(case when rn_last = 1 then total_volume end)      as volume_24h_rolling,
+    max(case when rn_last_valid_volume = 1 and total_volume is not null then total_volume end) as volume_24h_rolling,
     (
         max(case when rn_last = 1 then current_price end)
         - max(case when rn_first = 1 then current_price end)

@@ -16,7 +16,7 @@ select
     price_change_percentage_24h,
     price_change_percentage_7d_in_currency,
     market_cap_rank,
-    api_last_updated,
+    cast(api_last_updated as timestamp) as api_last_updated,
     fetched_at,
     -- Compute date_id inline instead of joining dim_time.
     -- Avoids fan-out risk when spine doesn't cover edge-case dates.
@@ -25,5 +25,5 @@ from {{ ref('int_coins_markets_dedup') }}
 
 {% if is_incremental() %}
 -- Lookback 3 days on api_last_updated to handle backfills/re-runs safely with delete+insert
-where api_last_updated >= (select max(api_last_updated) - interval '3 days' from {{ this }})
+where api_last_updated::timestamp >= (select max(api_last_updated) - interval '3 days' from {{ this }})
 {% endif %}

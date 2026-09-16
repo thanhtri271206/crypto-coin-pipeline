@@ -48,18 +48,18 @@ renamed as(
         id as coin_id,
         symbol,
         name,
-        cast(current_price as double) as current_price,
-        cast(market_cap as double) as market_cap,
-        cast(market_cap_rank as bigint) as market_cap_rank,
-        cast(total_volume as double) as total_volume,
-        cast(high_24h as double) as high_24h,
-        cast(low_24h as double) as low_24h,
+        cast(current_price as double) as current_price_raw,
+        cast(market_cap as double) as market_cap_raw,
+        cast(market_cap_rank as bigint) as market_cap_rank_raw,
+        cast(total_volume as double) as total_volume_raw,
+        cast(high_24h as double) as high_24h_raw,
+        cast(low_24h as double) as low_24h_raw,
         cast(price_change_24h as double) as price_change_24h,
-        cast(price_change_percentage_24h as double) as price_change_percentage_24h,
-        price_change_percentage_7d_in_currency,
-        cast(circulating_supply as double) as circulating_supply,
-        cast(total_supply as double) as total_supply,
-        cast(max_supply as double) as max_supply,
+        cast(price_change_percentage_24h as double) as price_change_percentage_24h_raw,
+        cast(price_change_percentage_7d_in_currency as double) as price_change_percentage_7d_in_currency_raw,
+        cast(circulating_supply as double) as circulating_supply_raw,
+        cast(total_supply as double) as total_supply_raw,
+        cast(max_supply as double) as max_supply_raw,
         last_updated as api_last_updated,
         date as snapshot_date,
         strptime(
@@ -68,6 +68,65 @@ renamed as(
         ) as fetched_at
     from
         source
+),
+sanitized as (
+    select
+        coin_id,
+        symbol,
+        name,
+
+        -- Sanity Guard: Price must be positive and realistic (< $10M)
+        case 
+            when current_price_raw <= 0 or current_price_raw > 1e7 then null 
+            else current_price_raw 
+        end as current_price,
+
+        -- Sanity Guard: Market cap non-negative and < $20T
+        case 
+            when market_cap_raw < 0 or market_cap_raw > 2e13 then null 
+            else market_cap_raw 
+        end as market_cap,
+
+        -- Sanity Guard: Rank >= 1
+        case 
+            when market_cap_rank_raw < 1 then null 
+            else market_cap_rank_raw 
+        end as market_cap_rank,
+
+        -- Sanity Guard: Volume cannot be negative, > $1T, or > 50x market_cap for established coins
+        case 
+            when total_volume_raw < 0 or total_volume_raw > 1e12 
+                 or (market_cap_raw > 1e6 and total_volume_raw > market_cap_raw * 50) 
+            then null 
+            else total_volume_raw 
+        end as total_volume,
+
+        case when high_24h_raw <= 0 or high_24h_raw > 1e7 then null else high_24h_raw end as high_24h,
+        case when low_24h_raw <= 0 or low_24h_raw > 1e7 then null else low_24h_raw end as low_24h,
+        price_change_24h,
+
+        -- Sanity Guard: % change bounds [-100%, +10,000%]
+        case 
+            when price_change_percentage_24h_raw < -100 or price_change_percentage_24h_raw > 10000 
+            then null 
+            else price_change_percentage_24h_raw 
+        end as price_change_percentage_24h,
+
+        case 
+            when price_change_percentage_7d_in_currency_raw < -100 or price_change_percentage_7d_in_currency_raw > 50000 
+            then null 
+            else price_change_percentage_7d_in_currency_raw 
+        end as price_change_percentage_7d_in_currency,
+
+        case when circulating_supply_raw < 0 then null else circulating_supply_raw end as circulating_supply,
+        case when total_supply_raw < 0 then null else total_supply_raw end as total_supply,
+        case when max_supply_raw < 0 then null else max_supply_raw end as max_supply,
+
+        api_last_updated,
+        snapshot_date,
+        fetched_at
+    from
+        renamed
 )
 
-select * from renamed
+select * from sanitized

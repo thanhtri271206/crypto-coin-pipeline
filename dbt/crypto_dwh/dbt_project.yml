@@ -39,6 +39,11 @@ models:
         layer: staging
         governance: PII_free
         owner: data_engineering
+      stg_coin_metadata:
+        +materialized: table
+      stg_market_chart:
+        +materialized: table
+
 
     intermediate:
       +materialized: view
