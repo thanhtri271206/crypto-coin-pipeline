@@ -11,4 +11,21 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          curl -sL --connect-timeout 30 --max-time 60 -o /dev/null -w "%{http_code}\n" https://crypto-coin-pipeline.streamlit.app/
+          HTTP_STATUS=$(curl -sSL -A "Mozilla/5.0" \
+            --connect-timeout 30 \
+            --max-time 60 \
+            --retry 3 \
+            --retry-delay 5 \
+            --cookie-jar /tmp/cookies.txt \
+            --cookie /tmp/cookies.txt \
+            -o /dev/null \
+            -w "%{http_code}" \
+            https://crypto-coin-pipeline.streamlit.app/)
+
+          echo "Streamlit HTTP response status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
+            echo "Ping successful! Streamlit app is alive."
+          else
+            echo "Ping failed with status $HTTP_STATUS"
+            exit 1
+          fi
