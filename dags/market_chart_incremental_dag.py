@@ -6,6 +6,7 @@ import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from utils.alerting import airflow_task_failure_callback, airflow_task_retry_callback
 
 from ingestion.coingecko_client import CoinGeckoClient
@@ -74,4 +75,15 @@ with DAG(
     # Dynamic Task Mapping: fetch -> upload -> validate
     chart_payloads = fetch_market_chart_raw.expand(coin_id=COIN_IDS)
     s3_keys = upload_market_chart_to_s3.expand(payload=chart_payloads)
-    validate_market_chart.expand(s3_key=s3_keys)
+    val_chart = validate_market_chart.expand(s3_key=s3_keys)
+
+    trigger_transform = TriggerDagRunOperator(
+        task_id="trigger_transform",
+        trigger_dag_id="transform_dag",
+        conf={"dbt_selector": "stg_market_chart+"},
+        wait_for_completion=False,
+        **DEFAULT_TASK_KWARGS,
+    )
+
+    val_chart >> trigger_transform
+

@@ -6,6 +6,7 @@ import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from utils.alerting import airflow_task_failure_callback, airflow_task_retry_callback
 
 from ingestion.coingecko_client import CoinGeckoClient
@@ -93,4 +94,15 @@ with DAG(
     # upload → validate (s3_key string XCom — nhỏ, không gây API server overload)
     metadata_payloads = fetch_coin_metadata_raw.expand(coin_id=COIN_IDS)
     s3_keys = upload_coin_metadata_to_s3.expand(payload=metadata_payloads)
-    validate_coin_metadata.expand(s3_key=s3_keys)
+    val_metadata = validate_coin_metadata.expand(s3_key=s3_keys)
+
+    trigger_transform = TriggerDagRunOperator(
+        task_id="trigger_transform",
+        trigger_dag_id="transform_dag",
+        conf={"dbt_selector": "stg_coin_metadata+"},
+        wait_for_completion=False,
+        **DEFAULT_TASK_KWARGS,
+    )
+
+    val_metadata >> trigger_transform
+

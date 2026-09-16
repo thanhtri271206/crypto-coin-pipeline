@@ -99,6 +99,7 @@ with DAG(
     trigger_transform = TriggerDagRunOperator(
         task_id="trigger_transform",
         trigger_dag_id="transform_dag",
+        conf={"dbt_selector": "stg_coins_markets+ stg_global+"},
         wait_for_completion=False,
         **DEFAULT_TASK_KWARGS,
     )
