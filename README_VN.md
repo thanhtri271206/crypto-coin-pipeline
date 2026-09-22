@@ -1,4 +1,4 @@
-﻿# 🚀 Pipeline Dữ Liệu Thị Trường Crypto End-to-End
+# 🚀 Pipeline Dữ Liệu Thị Trường Crypto End-to-End
 
 ### *Modern Data Stack Cấp Production — Kiến Trúc Lakehouse & Observability Thời Gian Thực*
 
@@ -7,14 +7,18 @@
 [![Apache Airflow 3.0.2](https://img.shields.io/badge/Airflow-3.0.2_Celery-017CEE.svg?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
 [![dbt Core](https://img.shields.io/badge/dbt--duckdb-1.12+-FF694B.svg?logo=dbt&logoColor=white)](https://www.getdbt.com/)
 [![DuckDB](https://img.shields.io/badge/DuckDB-In--Process_OLAP-FFF000.svg?logo=duckdb&logoColor=black)](https://duckdb.org/)
+[![MotherDuck](https://img.shields.io/badge/MotherDuck-Cloud_Serverless_DWH-FFF000.svg?logo=duckdb&logoColor=black)](https://motherduck.com/)
 [![MinIO Lakehouse](https://img.shields.io/badge/Storage-S3%20%2F%20MinIO-C72C48.svg?logo=minio&logoColor=white)](https://min.io/)
 [![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit_1.62-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Streamlit_Cloud-FF4B4B.svg?logo=streamlit&logoColor=white)](https://crypto-coin-pipeline.streamlit.app/)
+[![dbt Docs](https://img.shields.io/badge/dbt_Docs-GitHub_Pages-FF694B.svg?logo=dbt&logoColor=white)](https://thanhtri271206.github.io/crypto-coin-pipeline/)
 [![Code Style](https://img.shields.io/badge/Linter%20%26%20Format-Ruff-000000.svg?logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
 [![Tests](https://img.shields.io/badge/Pytest-17%20Passed-22c55e.svg?logo=pytest&logoColor=white)](https://pytest.org/)
 [![dbt Tests](https://img.shields.io/badge/dbt_Tests-150_Passed-22c55e.svg?logo=dbt&logoColor=white)](https://www.getdbt.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Also available in:** [🇬🇧 English](README.md)
+> **Also available in:** [🇬🇧 English](README.md)  
+> 🌐 **Live Demo App:** [crypto-coin-pipeline.streamlit.app](https://crypto-coin-pipeline.streamlit.app/) | 📖 **dbt Docs Trực Tuyến:** [thanhtri271206.github.io/crypto-coin-pipeline](https://thanhtri271206.github.io/crypto-coin-pipeline/)
 
 ---
 
@@ -32,7 +36,8 @@
 9. [Hướng Dẫn Chạy Cục Bộ](#-9-hướng-dẫn-chạy-cục-bộ)
 10. [Testing & Quality Matrix](#-10-testing--quality-matrix)
 11. [Runbook Vận Hành & FAQ](#️-11-runbook-vận-hành--faq)
-12. [Tác Giả & Liên Hệ](#-12-tác-giả--liên-hệ)
+12. [Hạn Chế Đã Biết & Lộ Trình Nâng Cấp](#-12-hạn-chế-đã-biết--lộ-trình-nâng-cấp)
+13. [Tác Giả & Liên Hệ](#-12-tác-giả--liên-hệ)
 
 ---
 
@@ -61,6 +66,8 @@ Thị trường tiền mã hóa không bao giờ nghỉ — nó hoạt động *
 
 ![dbt Data Lineage](assests/dbt-docs-data-lineage.png)
 
+> 📖 **dbt Docs & Lineage Trực Tuyến:** Khám phá toàn bộ catalog mô hình dữ liệu, định nghĩa trường thông tin, tests và biểu đồ phụ thuộc tương tác trực tiếp trên GitHub Pages: [https://thanhtri271206.github.io/crypto-coin-pipeline/](https://thanhtri271206.github.io/crypto-coin-pipeline/)
+
 ### Luồng Dữ Liệu Cấp Cao
 
 ```
@@ -83,7 +90,7 @@ Streamlit 1.62 Dashboard + SMTP Alerting Engine
 | :--- | :--- | :--- |
 | **Orchestrator** | **Apache Airflow 3.0.2 (Celery)** | Chuẩn công nghiệp với hệ sinh thái trưởng thành. API Server mới của Airflow 3.0 cho phép trigger task qua REST đúng cách. Celery Executor với Redis broker cho phép thực thi phân tán thực sự — task chạy song song trên worker riêng biệt. Dynamic Task Mapping (`expand()`) là lý do chủ chốt chọn Airflow thay vì các giải pháp đơn giản hơn. |
 | **Object Storage** | **MinIO (local) / AWS S3 (prod)** | 100% tương thích S3 API — cùng một codebase chạy cục bộ với MinIO và trên production với AWS S3, chỉ cần đổi biến môi trường. Hive-style partitioning (`date=YYYY-MM-DD`) cho phép DuckDB scan partition pruning hiệu quả. |
-| **OLAP Engine** | **DuckDB 1.11+** | Nhân vật chính của kiến trúc. Extension `httpfs` cho phép DuckDB scan trực tiếp JSON/Parquet từ S3 mà không cần copy dữ liệu về. Vectorized columnar execution xử lý hàng trăm nghìn dòng trong mili-giây — tất cả trong một file nhúng duy nhất, không cần cluster, không tốn chi phí hạ tầng. |
+| **OLAP & Cloud Warehouse** | **DuckDB 1.11+ / MotherDuck** | Nhân vật chính của kiến trúc. Extension `httpfs` cho phép DuckDB scan trực tiếp JSON/Parquet từ S3 với tốc độ xử lý sub-second. Tích hợp liền mạch cùng **MotherDuck** (Cloud-native Serverless DWH) để cấp nguồn cho ứng dụng Streamlit Cloud và giải quyết triệt để vấn đề concurrency/file lock cục bộ. |
 | **Data Transformation** | **dbt-duckdb 1.12+** | dbt đưa kỷ luật software engineering vào SQL: version control, lineage graph, automated testing, documentation, và modularity. dbt-duckdb adapter cho phép mount S3 bucket như `external_location` để staging models đọc thẳng từ MinIO. |
 | **API Client** | **httpx + asyncio + Tenacity** | `httpx.AsyncClient` với `asyncio.Semaphore(max_concurrency=5)` fetch đồng thời tất cả 10 biểu đồ coin (~5x nhanh hơn sequential). Tenacity xử lý exponential backoff (2s → 10s với jitter) cho HTTP 429 và lỗi mạng. |
 | **Schema Validation** | **Pydantic v2** | `ConfigDict(extra="ignore")` là lựa chọn có chủ đích: khi CoinGecko thêm field mới (schema drift), validator âm thầm bỏ qua field không biết thay vì làm vỡ pipeline. Chỉ field được khai báo mới được validate. |
@@ -110,6 +117,14 @@ Năm DAGs bao phủ toàn bộ vòng đời dữ liệu:
 - **Selective rebuild** — `transform_dag` đọc `dbt_selector` từ `dag_run.conf`. Một cập nhật metadata sẽ không trigger rebuild lại toàn bộ market snapshot models.
 - **Dynamic Task Mapping** — `ingest_coin_metadata` dùng `task.expand(coin_id=COIN_IDS)`, fan-out một task độc lập mỗi coin với retry granularity riêng. Sạch hơn nhiều so với loop trong một task duy nhất.
 - **`max_active_tasks=10`** — Tăng từ mặc định 3 để tránh task starvation: 10 coin × 3 task = 30 task tranh 3 slot sẽ dẫn đến timeout.
+
+### 📸 Minh Chứng Vận Hành Trên Airflow UI
+
+Pipeline được vận hành thực tế trên cụm Apache Airflow 3.0.2 với Celery Executor, Redis broker và metadata database PostgreSQL:
+
+| Danh sách DAGs đang kích hoạt | Lịch sử thực thi DAGs & Trạng thái SLA |
+| :---: | :---: |
+| ![Airflow DAGs Overview](assests/airflow-dags-lists.png) | ![Airflow DAG Runs History](assests/dags-run-history.png) |
 
 ---
 
@@ -303,19 +318,27 @@ cmd = f"dbt build --select {dbt_selector}" if dbt_selector else "dbt build"
 
 ## 📊 6. Dashboard Phân Tích & Quan Sát
 
-Được xây dựng với **Streamlit 1.62** theo phong cách dark theme tài chính, dashboard 4 trang bao phủ giám sát thị trường từ vĩ mô đến vi mô:
+> 🚀 **Trải Nghiệm Live Demo:** Truy cập dashboard trực tiếp trên Streamlit Cloud mà không cần cài đặt môi trường local: [https://crypto-coin-pipeline.streamlit.app/](https://crypto-coin-pipeline.streamlit.app/)
 
-**Trang 1 — Top Movers & Volume Scanner**
-Xếp hạng real-time Top Gainers và Losers trong 10 coin đang theo dõi. Scatter plot ánh xạ biến động giá 24h vs. volume spike ratio — những coin vừa có biến động giá lớn vừa có khối lượng đột biến (> 1.5× trung bình 7 ngày) được highlight như potential anomaly đáng điều tra thêm.
+Được xây dựng với **Streamlit 1.62** và **Plotly** theo phong cách dark theme tài chính chuyên nghiệp, dashboard cung cấp bộ công cụ phân tích và quan sát toàn diện qua 5 góc nhìn chính:
 
-**Trang 2 — Coin Deep-Dive**
-Biểu đồ nến OHLCV tương tác với overlay MA(7) và MA(30). Biểu đồ Rolling 30-day Volatility, Max Drawdown từ ATH theo thời gian, và card metadata từ `dim_coin` hiển thị ngày ra mắt, danh mục, và liên kết chính thức.
+### 📸 Thư Viện Hình Ảnh Dashboard Trực Quan
 
-**Trang 3 — Multi-Coin Comparison**
-Chỉ số performance chuẩn hóa (base = 100 tại điểm dữ liệu sớm nhất) để so sánh tăng trưởng tương đối giữa các coin mà không bị lệch vì chênh lệch giá — so sánh Bitcoin $60K với SHIB $0.00001 trên cùng trục. Correlation heatmap của daily returns để phân tích đa dạng hóa danh mục đầu tư.
+| Tổng Quan Thị Trường (Trang Chủ) | Top Movers & Máy Quét Khối Lượng (Trang 1) |
+| :---: | :---: |
+| ![Market Overview](assests/streamlit-page-market-overview.png) | ![Top Movers](assests/streamlit-page-top-movers.png) |
+| **Phân Tích Chi Tiết Từng Coin (Trang 2)** | **So Sánh Tăng Trưởng Đa Coin (Trang 3)** |
+| ![Coin Deep Dive](assests/streamlit-page-coin-deep-dive.png) | ![Multi-Coin Comparison](assests/streamlit-page-comparision.png) |
+| **Thông Tin Vĩ Mô Toàn Thị Trường (Trang 4)** | **Giám Sát Warehouse & Data Lineage (Trang 4)** |
+| ![Market Intelligence](assests/streamlit-page-market-intelligence.png) | ![Pipeline Observability](assests/streamlit-page-data-pipeline-observability.png) |
 
-**Trang 4 — Market Intelligence & Observability**
-Sức khỏe vĩ mô: xu hướng tổng vốn hóa thị trường toàn cầu, BTC và ETH dominance theo thời gian, tỷ lệ tập trung Top-10. Mục **Pipeline Observability** hiển thị real-time số bản ghi cho mỗi bảng trong warehouse, kích thước vật lý file `crypto.duckdb`, và đồ thị dbt data lineage.
+### Chi Tiết Tính Năng Từng Trang
+
+- **Trang Chủ — Market Overview:** Bảng tổng quan thị trường theo thời gian thực hiển thị giá hiện tại, xu hướng biến động 24h và các chỉ số vốn hóa tổng thể.
+- **Trang 1 — Top Movers & Volume Scanner:** Xếp hạng real-time Top Gainers và Losers trong 10 coin đang theo dõi. Scatter plot ánh xạ biến động giá 24h vs. volume spike ratio — những coin vừa có biến động giá lớn vừa có khối lượng đột biến (> 1.5× trung bình 7 ngày) được highlight như potential anomaly đáng điều tra thêm.
+- **Trang 2 — Coin Deep-Dive:** Biểu đồ nến OHLCV tương tác với overlay MA(7) và MA(30). Biểu đồ Rolling 30-day Volatility, Max Drawdown từ ATH theo thời gian, và card metadata từ `dim_coin` hiển thị ngày ra mắt, danh mục, và liên kết chính thức.
+- **Trang 3 — Multi-Coin Comparison:** Chỉ số performance chuẩn hóa (base = 100 tại điểm dữ liệu sớm nhất) để so sánh tăng trưởng tương đối giữa các coin mà không bị lệch vì chênh lệch giá — so sánh Bitcoin $60K với SHIB $0.00001 trên cùng trục. Correlation heatmap của daily returns để phân tích đa dạng hóa danh mục đầu tư.
+- **Trang 4 — Market Intelligence & Observability:** Sức khỏe vĩ mô: xu hướng tổng vốn hóa thị trường toàn cầu, BTC và ETH dominance theo thời gian, tỷ lệ tập trung Top-10. Mục **Pipeline Observability** hiển thị real-time số bản ghi cho mỗi bảng trong warehouse, kích thước vật lý file `crypto.duckdb`, và đồ thị dbt data lineage.
 
 ---
 
@@ -540,7 +563,22 @@ Profile `prod` trong `profiles.yml` dùng `s3_use_ssl: "true"` và `s3_url_style
 
 ---
 
-## 👤 12. Tác Giả & Liên Hệ
+## 🔮 12. Hạn Chế Đã Biết & Lộ Trình Nâng Cấp
+
+Kỹ thuật thực tế luôn đi liền với việc thấu hiểu và đánh đổi (trade-offs). Kiến trúc hiện tại ưu tiên tối ưu chi phí, không tốn tài nguyên bảo trì hạ tầng và mang lại hiệu năng phân tích cao cho Modern Data Stack. Để đảm bảo tính minh bạch kỹ thuật, dưới đây là các ranh giới kiến trúc hiện hữu cùng lộ trình phát triển tiếp theo:
+
+| # | Khía cạnh hạn chế | Thực trạng kỹ thuật hiện tại | Lộ trình nâng cấp tương lai (Roadmap) |
+| :-: | :--- | :--- | :--- |
+| **1** | **Chưa hỗ trợ Open Table Format (ACID trên Lake)** | Tầng Bronze trên MinIO/S3 lưu raw JSON theo phân vùng Hive (`date=YYYY-MM-DD/`). Chưa có ACID transactions, time travel hay snapshot isolation ở mức data lake. | Di chuyển tầng Bronze/Silver sang **Apache Iceberg** hoặc **Delta Lake** (sử dụng extension `iceberg`/`delta` của DuckDB) để hỗ trợ atomic commits, rollback và schema evolution an toàn. |
+| **2** | **Giới hạn Rate-Limit & Backfill của API Miễn Phí** | Sử dụng CoinGecko Public Demo API với quota ~30 calls/phút và tự động aggregate thô dữ liệu nến lịch sử quá 90 ngày. | Bổ sung cơ chế fallback đa sàn thông qua **CCXT / Binance Public API** và cấu hình linh hoạt nâng cấp API key khi cần nạp dữ liệu nến tick-by-tick tần suất cao. |
+| **3** | **Độ trễ Micro-Batch vs. Real-Time Streaming** | Pipeline xử lý dạng batch định kỳ (@hourly, @daily) qua Airflow tạo ra độ trễ phân tích khoảng 1 giờ. | Xây dựng thêm nhánh **Fast-Path (Kiến trúc Kappa)** kết hợp sàn WebSocket, **Apache Kafka / Redpanda** và **Apache Flink** để phục vụ cảnh báo biến động giá tức thì (sub-second). |
+| **4** | **Kênh Cảnh Báo Vận Hành Đơn Lẻ** | Cảnh báo khi task Airflow thất bại hiện chỉ gửi qua HTML Email (SMTP Gmail STARTTLS). | Tích hợp thêm Webhook tức thời vào **Slack**, **Telegram Bot** hoặc **PagerDuty** giúp đội ngũ on-call phát hiện sự cố nhanh chóng. |
+| **5** | **Thiếu Ephemeral Integration Test trong CI/CD** | GitHub Actions CI hiện chỉ kiểm tra linting (Ruff), unit test mock (Pytest) và compile dbt. | Ứng dụng **Testcontainers** trong CI để tự động dựng MinIO & DuckDB container tạm thời, kiểm thử toàn diện quy trình End-to-End trước khi merge PR. |
+| **6** | **Độ Trễ Thực Thi DAG & Chi Phí Kiểm Thử dbt** | `transform_dag` chạy trung bình ~2p15s (riêng `dbt build` mất ~80s), và task fetch snapshot mất ~20s. Điểm nghẽn chính: 150+ SQL data tests chạy tuần tự quét MinIO/S3 qua mạng ảo Docker, cộng với thời gian biên dịch manifest Jinja và cơ chế sleep giữ an toàn quota API. | Tối ưu số luồng tính toán DuckDB (`threads: 4`), tách bộ 150+ financial assertion tests sang một DAG kiểm toán chạy hàng ngày (lịch hourly chỉ test nhanh schema staging), và áp dụng dbt Slim CI (`state:modified`). |
+
+---
+
+## 👤 13. Tác Giả & Liên Hệ
 
 **Bùi Phan Thanh Trí** — Data Engineer
 

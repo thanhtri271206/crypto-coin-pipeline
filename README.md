@@ -1,4 +1,4 @@
-﻿# 🚀 End-to-End Crypto Market Data Pipeline
+# 🚀 End-to-End Crypto Market Data Pipeline
 
 ### *A Production-Grade Modern Data Stack — Lakehouse Architecture & Real-Time Observability*
 
@@ -7,13 +7,18 @@
 [![Apache Airflow 3.0.2](https://img.shields.io/badge/Airflow-3.0.2_Celery-017CEE.svg?logo=apacheairflow&logoColor=white)](https://airflow.apache.org/)
 [![dbt Core](https://img.shields.io/badge/dbt--duckdb-1.12+-FF694B.svg?logo=dbt&logoColor=white)](https://www.getdbt.com/)
 [![DuckDB](https://img.shields.io/badge/DuckDB-In--Process_OLAP-FFF000.svg?logo=duckdb&logoColor=black)](https://duckdb.org/)
+[![MotherDuck](https://img.shields.io/badge/MotherDuck-Cloud_Serverless_DWH-FFF000.svg?logo=duckdb&logoColor=black)](https://motherduck.com/)
 [![MinIO Lakehouse](https://img.shields.io/badge/Storage-S3%20%2F%20MinIO-C72C48.svg?logo=minio&logoColor=white)](https://min.io/)
 [![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit_1.62-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Streamlit_Cloud-FF4B4B.svg?logo=streamlit&logoColor=white)](https://crypto-coin-pipeline.streamlit.app/)
+[![dbt Docs](https://img.shields.io/badge/dbt_Docs-GitHub_Pages-FF694B.svg?logo=dbt&logoColor=white)](https://thanhtri271206.github.io/crypto-coin-pipeline/)
 [![Code Style](https://img.shields.io/badge/Linter%20%26%20Format-Ruff-000000.svg?logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
 [![Tests](https://img.shields.io/badge/Pytest-17%20Passed-22c55e.svg?logo=pytest&logoColor=white)](https://pytest.org/)
 [![dbt Tests](https://img.shields.io/badge/dbt_Tests-150_Passed-22c55e.svg?logo=dbt&logoColor=white)](https://www.getdbt.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Also available in:** [🇻🇳 Tiếng Việt](README_VN.md)
+> **Also available in:** [🇻🇳 Tiếng Việt](README_VN.md)  
+> 🌐 **Live Demo App:** [crypto-coin-pipeline.streamlit.app](https://crypto-coin-pipeline.streamlit.app/) | 📖 **Interactive dbt Docs:** [thanhtri271206.github.io/crypto-coin-pipeline](https://thanhtri271206.github.io/crypto-coin-pipeline/)
 
 ---
 
@@ -32,7 +37,8 @@
 9. [Quickstart — Run Locally](#-9-quickstart--run-locally)
 10. [Testing & Quality Matrix](#-10-testing--quality-matrix)
 11. [Operational Runbook & FAQ](#-11-operational-runbook--faq)
-12. [Author & Contact](#-12-author--contact)
+12. [Known Limitations & Engineering Roadmap](#-12-known-limitations--engineering-roadmap)
+13. [Author & Contact](#-13-author--contact)
 
 ---
 
@@ -61,6 +67,8 @@ The cryptocurrency market never sleeps — it runs **24/7/365** with massive tra
 
 ![dbt Data Lineage](assests/dbt-docs-data-lineage.png)
 
+> 📖 **Interactive dbt Documentation & Lineage Graph:** Explore the full interactive model documentation, column descriptions, and lineage graph hosted on GitHub Pages: [https://thanhtri271206.github.io/crypto-coin-pipeline/](https://thanhtri271206.github.io/crypto-coin-pipeline/)
+
 ### High-Level Flow
 
 ```
@@ -83,7 +91,7 @@ Streamlit 1.62 Dashboard + SMTP Alerting Engine
 | :--- | :--- | :--- |
 | **Orchestrator** | **Apache Airflow 3.0.2 (Celery)** | Industry standard with a mature ecosystem. Celery Executor with Redis broker gives real distributed execution — tasks actually run in parallel on separate workers. Dynamic Task Mapping (`expand()`) was a key reason to choose Airflow over simpler alternatives like Prefect or Dagster for this project. |
 | **Object Storage** | **MinIO (local) / AWS S3 (prod)** | 100% S3 API compatibility — the same codebase runs locally with MinIO and in production with AWS S3, only env vars change. Hive-style partitioning (`date=YYYY-MM-DD`) enables DuckDB partition pruning during scans. |
-| **OLAP Engine** | **DuckDB 1.11+** | The standout architectural choice. DuckDB's `httpfs` extension scans JSON/Parquet directly from S3 without copying data. Vectorized columnar execution processes hundreds of thousands of rows in milliseconds — all in a single embedded file, zero cluster cost. |
+| **OLAP & Cloud Warehouse** | **DuckDB 1.11+ / MotherDuck** | The standout architectural choice. DuckDB's `httpfs` extension scans JSON/Parquet directly from S3 without copying data with sub-second execution. Integrated with **MotherDuck** (serverless cloud analytics) to power the Streamlit Cloud deployment and eliminate local DuckDB file-locking concurrency constraints. |
 | **Data Transformation** | **dbt-duckdb 1.12+** | dbt brings software engineering discipline to SQL: version control, lineage graphs, automated testing, and documentation. The dbt-duckdb adapter mounts the S3 bucket as `external_location`, letting staging models read directly from MinIO. |
 | **API Client** | **httpx + asyncio + Tenacity** | `httpx.AsyncClient` with `asyncio.Semaphore(max_concurrency=5)` fetches all 10 coin charts concurrently (~5x faster than sequential). Tenacity handles exponential backoff (2s → 10s with jitter) for HTTP 429 and network errors. |
 | **Schema Validation** | **Pydantic v2** | `ConfigDict(extra="ignore")` is the deliberate design: when CoinGecko adds new fields (schema drift), the validator ignores unknown fields silently. Only declared fields matter, so the pipeline never breaks on API evolution. |
@@ -110,6 +118,14 @@ Five DAGs cover the complete data lifecycle:
 - **Selective rebuild** — `transform_dag` reads `dbt_selector` from `dag_run.conf`. A metadata update won't trigger a full rebuild of market snapshot models.
 - **Dynamic Task Mapping** — `ingest_coin_metadata` uses `task.expand(coin_id=COIN_IDS)`, fanning out one task per coin with independent retry granularity. Much cleaner than looping inside a single task.
 - **`max_active_tasks=10`** — Raised from the default 3 to prevent starvation: 10 coins × 3 tasks = 30 tasks competing for 3 slots would time out without this.
+
+### 📸 Production Airflow UI Evidence
+
+The pipeline runs on an Apache Airflow 3.0.2 Celery cluster with Redis broker and PostgreSQL metadata store:
+
+| Active DAGs Registered | DAG Execution Runs & SLA Status |
+| :---: | :---: |
+| ![Airflow DAGs Overview](assests/airflow-dags-lists.png) | ![Airflow DAG Runs History](assests/dags-run-history.png) |
 
 ---
 
@@ -303,19 +319,27 @@ cmd = f"dbt build --select {dbt_selector}" if dbt_selector else "dbt build"
 
 ## 📊 6. Analytics & Observability Dashboard
 
-Built with **Streamlit 1.62** in a financial dark-theme aesthetic, the four-page dashboard covers everything from macro market health to individual coin deep-dives:
+> 🚀 **Live Demo:** Access the deployed Streamlit Cloud application directly without local setup: [https://crypto-coin-pipeline.streamlit.app/](https://crypto-coin-pipeline.streamlit.app/)
 
-**Page 1 — Top Movers & Volume Scanner**
-Real-time ranking of Top Gainers and Losers across the 10 tracked coins. A scatter plot maps 24h price change vs. volume spike ratio — coins simultaneously showing high price moves AND high volume spikes (> 1.5× 7-day average) are highlighted as potential anomalies worth investigating.
+Built with **Streamlit 1.62** and **Plotly** in a bespoke financial dark-theme aesthetic, the dashboard provides a complete analytics and observability suite across 5 core views:
 
-**Page 2 — Coin Deep-Dive**
-Interactive OHLCV candlestick chart with MA(7) and MA(30) moving average overlays. Rolling 30-day volatility chart, Max Drawdown from ATH timeline, plus a metadata card from `dim_coin` showing genesis date, categories, and official links.
+### 📸 Dashboard Visual Gallery
 
-**Page 3 — Multi-Coin Comparison**
-Normalized performance index (base = 100 at earliest data point) to compare relative growth across all coins without price-scale distortion — comparing a $60K Bitcoin with a $0.00001 SHIB on the same chart. Correlation heatmap of daily returns for portfolio diversification analysis.
+| Market Overview (Home) | Top Movers & Volume Scanner (Page 1) |
+| :---: | :---: |
+| ![Market Overview](assests/streamlit-page-market-overview.png) | ![Top Movers](assests/streamlit-page-top-movers.png) |
+| **Coin Deep-Dive & Financial Indicators (Page 2)** | **Multi-Coin Performance Comparison (Page 3)** |
+| ![Coin Deep Dive](assests/streamlit-page-coin-deep-dive.png) | ![Multi-Coin Comparison](assests/streamlit-page-comparision.png) |
+| **Global Market Intelligence (Page 4)** | **Warehouse & Lineage Observability (Page 4)** |
+| ![Market Intelligence](assests/streamlit-page-market-intelligence.png) | ![Pipeline Observability](assests/streamlit-page-data-pipeline-observability.png) |
 
-**Page 4 — Market Intelligence & Observability**
-Macro market health: global market cap trend, BTC and ETH dominance over time, top-10 concentration ratio. The **Pipeline Observability** panel shows real-time row counts for every warehouse table, physical `crypto.duckdb` file size, and the dbt data lineage graph.
+### Page Breakdown & Capabilities
+
+- **Home — Market Overview:** Real-time crypto market summary displaying current prices, 24h market trend lines, and high-level market statistics.
+- **Page 1 — Top Movers & Volume Scanner:** Real-time ranking of Top Gainers and Losers across the 10 tracked coins. An interactive scatter plot maps 24h price change vs. volume spike ratio — coins simultaneously showing high price moves AND high volume spikes (> 1.5× 7-day average) are highlighted as potential anomalies worth investigating.
+- **Page 2 — Coin Deep-Dive:** Interactive OHLCV candlestick chart with MA(7) and MA(30) moving average overlays. Rolling 30-day volatility chart, Max Drawdown from ATH timeline, plus a metadata card from `dim_coin` showing genesis date, categories, and official links.
+- **Page 3 — Multi-Coin Comparison:** Normalized performance index (base = 100 at earliest data point) to compare relative growth across all coins without price-scale distortion — comparing a $60K Bitcoin with a $0.00001 SHIB on the same chart. Correlation heatmap of daily returns for portfolio diversification analysis.
+- **Page 4 — Market Intelligence & Observability:** Macro market health: global market cap trend, BTC and ETH dominance over time, top-10 concentration ratio. The **Pipeline Observability** panel shows real-time row counts for every warehouse table, physical `crypto.duckdb` file size, and the dbt data lineage graph.
 
 ---
 
@@ -540,7 +564,22 @@ The `prod` profile in `profiles.yml` uses `s3_use_ssl: "true"` and `s3_url_style
 
 ---
 
-## 👤 12. Author & Contact
+## 🔮 12. Known Limitations & Engineering Roadmap
+
+Engineering is fundamentally about navigating trade-offs. The current architecture prioritizes low cost, zero maintenance, and lightweight modern data stack performance. To maintain architectural transparency, here are the documented engineering boundaries and the planned evolution path:
+
+| # | Limitation Area | Current State & Technical Constraint | Future Engineering Roadmap |
+| :-: | :--- | :--- | :--- |
+| **1** | **No Open Table Format (ACID on Lake)** | Bronze storage on MinIO/S3 writes raw JSON files in Hive partitions (`date=YYYY-MM-DD/`). Lacks lake-level ACID transactions, time travel, and snapshot isolation. | Migrate Bronze/Silver storage to **Apache Iceberg** or **Delta Lake** using DuckDB's `iceberg` / `delta` extensions to enable atomic commits, rollbacks, and schema evolution. |
+| **2** | **Free-Tier Ingestion & Backfill Granularity** | CoinGecko Public Demo API enforces ~30 calls/min rate limits and aggregates historical candles beyond 90 days. | Implement a multi-exchange fallback provider via **CCXT / Binance Public API** and support API key tier upgrades for high-frequency historical ticks. |
+| **3** | **Micro-Batch Latency vs. Real-Time** | Scheduled micro-batches (@hourly, @daily) via Airflow introduce an inherent 1-hour analytical latency. | Architect a **Fast-Path / Kappa Architecture** branch using exchange WebSockets, **Apache Kafka / Redpanda**, and **Apache Flink** for sub-second volatility alerts. |
+| **4** | **Single Notification Alerting Channel** | Pipeline task failures notify exclusively through HTML email via SMTP (Gmail STARTTLS). | Integrate instant operational webhooks into **Slack**, **Telegram Bot**, or **PagerDuty** for faster on-call incident response. |
+| **5** | **Absence of Ephemeral E2E CI/CD Tests** | GitHub Actions CI validates code style (Ruff), unit mocks (Pytest), and dbt compilation. | Integrate **Testcontainers** into CI to spin up isolated, ephemeral MinIO and DuckDB containers for true End-to-End pipeline execution tests on pull requests. |
+| **6** | **DAG Execution Latency & Test Overhead** | `transform_dag` averages ~2m15s (with `dbt build` taking ~80s), and `ingest_market_snapshot` fetch task takes ~20s. Primary drivers: 150+ automated SQL tests running sequentially against MinIO/S3 via `httpfs` over Docker bridge network, combined with Jinja manifest compilation and API rate-limiting margins. | Tune DuckDB thread concurrency (`threads: 4`), decouple the full 150-test financial assertion suite into an asynchronous daily audit DAG (keeping only critical schema checks for hourly runs), and adopt dbt Slim CI (`state:modified`). |
+
+---
+
+## 👤 13. Author & Contact
 
 **Bui Phan Thanh Tri** — Data Engineer
 
