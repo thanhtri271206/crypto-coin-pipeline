@@ -110,7 +110,10 @@ def get_top_movers() -> pd.DataFrame:
             rank_change,
             total_volume,
             avg_volume_7d,
-            volume_spike_ratio
+            volume_spike_ratio,
+            volume_upper_fence,
+            is_volume_spike,
+            is_extreme_volume_anomaly
         FROM marts.top_movers_mart
         ORDER BY market_cap_rank ASC
     """

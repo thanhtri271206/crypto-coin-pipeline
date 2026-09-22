@@ -166,18 +166,42 @@ if not has_spike:
 col_vol1, col_vol2 = st.columns([3, 2])
 
 with col_vol1:
-    df_vol = df_raw[
+    filter_anomalies_only = st.checkbox(
+        "🔍 Chỉ hiển thị coin có biến động Volume bất thường (Spikes & Anomalies)",
+        value=False,
+        key="filter_anomalies"
+    )
+
+    df_vol_base = df_raw.copy()
+    if "is_extreme_volume_anomaly" in df_vol_base.columns and "is_volume_spike" in df_vol_base.columns:
+        def _get_status(r):
+            if r.get("is_extreme_volume_anomaly") is True:
+                return "🚨 Extreme"
+            elif r.get("is_volume_spike") is True:
+                return "⚡ Spike"
+            return "Normal"
+        df_vol_base["anomaly_status"] = df_vol_base.apply(_get_status, axis=1)
+    else:
+        df_vol_base["anomaly_status"] = "Normal"
+
+    if filter_anomalies_only:
+        df_vol_base = df_vol_base[df_vol_base["anomaly_status"].isin(["🚨 Extreme", "⚡ Spike"])]
+        if df_vol_base.empty:
+            st.info("Hiện không có coin nào vượt ngưỡng trần biến động bất thường.")
+
+    df_vol = df_vol_base[
         [
             "symbol",
             "display_name",
             "total_volume",
             "avg_volume_7d",
             "volume_spike_ratio",
+            "anomaly_status",
             "price_change_percentage_24h",
         ]
     ].copy()
     df_vol = df_vol.sort_values("total_volume", ascending=False)
-    df_vol.columns = ["Symbol", "Coin", "Volume 24h", "Avg Vol 7d", "Spike Ratio", "Price Δ 24h %"]
+    df_vol.columns = ["Symbol", "Coin", "Volume 24h", "Avg Vol 7d", "Spike Ratio", "Anomaly Status", "Price Δ 24h %"]
 
     def style_spike(val):
         if pd.isna(val):
@@ -188,8 +212,16 @@ with col_vol1:
             return "color: #FFA726"
         return "color: #8B949E"
 
+    def style_status(val):
+        if val == "🚨 Extreme":
+            return "color: #EF5350; font-weight: 700; background-color: rgba(239, 83, 80, 0.15)"
+        elif val == "⚡ Spike":
+            return "color: #FFA726; font-weight: 600; background-color: rgba(255, 167, 38, 0.15)"
+        return "color: #8B949E"
+
     styled_vol = (
         df_vol.style.map(style_spike, subset=["Spike Ratio"])
+        .map(style_status, subset=["Anomaly Status"])
         .map(style_change, subset=["Price Δ 24h %"])
         .format(
             {
@@ -208,7 +240,7 @@ with col_vol1:
 
 with col_vol2:
     if has_spike:
-        with st.expander("📖 Đọc Volume Spike"):
+        with st.expander("📖 Đọc Volume Spike & Dynamic IQR Anomaly"):
             st.markdown("""
 **Spike Ratio = Volume hôm nay / Avg Volume 7 ngày trước**
 
@@ -218,6 +250,10 @@ with col_vol2:
 | 1.0–2.0× | Bình thường |
 | 2.0–3.0× | ⚠️ Volume cao — có sự kiện |
 | > 3.0× | 🔥 Volume bất thường |
+
+**Dynamic Anomaly Detection (IQR 14 ngày):**
+- **⚡ Volume Spike:** Vượt ngưỡng $Q_3 + 1.5 \\times IQR$ của chính coin đó.
+- **🚨 Extreme Outlier:** Vượt ngưỡng $Q_3 + 3.0 \\times IQR$ (cực kỳ bất thường).
 
 **Kết hợp với price:**
 - Spike + giá tăng → Breakout bullish

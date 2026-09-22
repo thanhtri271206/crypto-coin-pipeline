@@ -198,8 +198,9 @@ def gainers_losers_bar(
 def volume_spike_scatter(df: pd.DataFrame) -> go.Figure:
     """
     Scatter: X = price_change_24h, Y = volume_spike_ratio.
-    Phân tích bất thường volume vs. giá.
+    Phân tích bất thường volume vs. giá kèm cờ Dynamic IQR Anomaly.
     df cần: coin_id, price_change_percentage_24h, volume_spike_ratio
+    Tùy chọn: is_volume_spike, is_extreme_volume_anomaly, volume_upper_fence
     """
     df = df.dropna(subset=["volume_spike_ratio", "price_change_percentage_24h"])
     if df.empty:
@@ -208,20 +209,55 @@ def volume_spike_scatter(df: pd.DataFrame) -> go.Figure:
     colors = [theme.COIN_COLORS.get(c, theme.NEUTRAL_GRAY) for c in df["coin_id"]]
     labels = [theme.COIN_NAMES.get(c, c) for c in df["coin_id"]]
 
+    # Xác định kích thước và viền marker theo mức độ bất thường
+    marker_sizes = []
+    line_widths = []
+    line_colors = []
+    anomaly_status = []
+
+    has_flags = "is_extreme_volume_anomaly" in df.columns and "is_volume_spike" in df.columns
+
+    for _, row in df.iterrows():
+        is_extreme = row.get("is_extreme_volume_anomaly") is True if has_flags else False
+        is_spike = row.get("is_volume_spike") is True if has_flags else False
+
+        if is_extreme:
+            marker_sizes.append(18)
+            line_widths.append(3)
+            line_colors.append(theme.NEGATIVE_RED)
+            anomaly_status.append("🚨 Extreme Outlier (k=3.0 IQR)")
+        elif is_spike:
+            marker_sizes.append(15)
+            line_widths.append(2)
+            line_colors.append(theme.WARN_AMBER)
+            anomaly_status.append("⚡ Volume Spike (k=1.5 IQR)")
+        else:
+            marker_sizes.append(12)
+            line_widths.append(1)
+            line_colors.append(theme.BORDER)
+            anomaly_status.append("Normal")
+
+    custom_data = list(
+        zip(labels, df["price_change_percentage_24h"], df["volume_spike_ratio"], anomaly_status)
+    )
+
     fig = go.Figure(
         go.Scatter(
             x=df["price_change_percentage_24h"],
             y=df["volume_spike_ratio"],
             mode="markers+text",
-            marker=dict(size=14, color=colors, line=dict(width=1, color=theme.BORDER)),
+            marker=dict(
+                size=marker_sizes,
+                color=colors,
+                line=dict(width=line_widths, color=line_colors),
+            ),
             text=[theme.COIN_SYMBOLS.get(c, c) for c in df["coin_id"]],
             textposition="top center",
             textfont=dict(size=10, color=theme.TEXT_PRIMARY),
-            customdata=list(
-                zip(labels, df["price_change_percentage_24h"], df["volume_spike_ratio"])
-            ),
+            customdata=custom_data,
             hovertemplate=(
                 "<b>%{customdata[0]}</b><br>"
+                "Status: %{customdata[3]}<br>"
                 "Price Change: %{customdata[1]:+.2f}%<br>"
                 "Volume Spike: %{customdata[2]:.2f}x avg<br>"
                 "<extra></extra>"
