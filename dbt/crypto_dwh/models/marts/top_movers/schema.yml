@@ -151,17 +151,50 @@ models:
               config:
                 where: avg_volume_7d is not null
 
+      - name: volume_upper_fence
+        description: >
+          Ngưỡng trần volume (upper fence) tính theo phương pháp IQR (Q3 + 1.5 * IQR)
+          trên cửa sổ trượt 14 ngày của ngày hôm qua (T-1), có floor an toàn 1.5x avg_volume_14d.
+          NULL trong những ngày đầu pipeline khi chưa đủ 7 ngày dữ liệu mẫu.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                where: volume_upper_fence is not null
+
+      - name: is_volume_spike
+        description: >
+          Cờ boolean phát hiện volume tăng đột biến (Moderate Spike: total_volume > volume_upper_fence).
+          Phục vụ Dashboard / Trader theo dõi các đợt bùng nổ volume.
+          NULL nếu chưa đủ dữ liệu mẫu để tính fence.
+        data_tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                where: is_volume_spike is not null
+
+      - name: is_extreme_volume_anomaly
+        description: >
+          Cờ boolean phát hiện volume bất thường cực đoan (Extreme Anomaly: total_volume > Q3 + 3.0 * IQR).
+          Phục vụ Data Quality, Data Observability và Alerting cho Data Engineer.
+          NULL nếu chưa đủ dữ liệu mẫu để tính fence.
+        data_tests:
+          - accepted_values:
+              values: [true, false]
+              config:
+                where: is_extreme_volume_anomaly is not null
+
       - name: volume_spike_ratio
         description: >
           Tỷ lệ volume hiện tại so với trung bình 7 ngày: total_volume / avg_volume_7d.
           > 1.0 = volume cao hơn bình thường (có thể là tín hiệu tăng/giảm đột biến).
           < 1.0 = volume thấp hơn bình thường (thị trường ít hoạt động).
           = NULL nếu avg_volume_7d NULL (ngày đầu pipeline).
-          Bound [0, 50]: volume spike > 50x trung bình là outlier cực đoan
-          (nếu xảy ra có thể là data lỗi từ API).
+          Bound [0, 200]: volume spike > 200x trung bình là outlier bất thường từ API.
         data_tests:
           - dbt_utils.accepted_range:
               min_value: 0
-              max_value: 50
+              max_value: 200
               config:
                 where: volume_spike_ratio is not null
+

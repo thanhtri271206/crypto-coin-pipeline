@@ -46,7 +46,7 @@ crypto_dwh:
       path: "md:crypto_dwh"
       token: "{{ env_var('MOTHERDUCK_TOKEN') }}"
       extensions: [httpfs]
-      threads: 4
+      threads: 6
       settings:
         s3_region: "{{ env_var('AWS_DEFAULT_REGION') }}"
         s3_access_key_id: "{{ env_var('AWS_ACCESS_KEY_ID') }}"

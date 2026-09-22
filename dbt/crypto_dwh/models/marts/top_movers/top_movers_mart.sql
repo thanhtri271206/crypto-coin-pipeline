@@ -45,7 +45,12 @@ rank_change as (
 ),
 
 volume_baseline as (
-    select coin_id, snapshot_date, avg_volume_7d
+    select
+        coin_id,
+        snapshot_date,
+        avg_volume_7d,
+        volume_upper_fence_moderate,
+        volume_upper_fence_extreme
     from {{ ref('int_coin_volume_rolling_avg') }}
 )
 
@@ -60,10 +65,23 @@ select
     rc.rank_change,
     l.total_volume,
     v.avg_volume_7d,
-    -- Sanity Guard: Tỷ lệ volume spike phải nằm trong khoảng hợp lý [0, 50].
-    -- Nếu vượt quá 50 (dấu hiệu outlier bất thường từ API), gán về NULL để bảo vệ dashboard và test.
+    v.volume_upper_fence_moderate as volume_upper_fence,
     case 
-        when l.total_volume / nullif(v.avg_volume_7d, 0) between 0 and 50 
+        when v.volume_upper_fence_moderate is not null and l.total_volume > v.volume_upper_fence_moderate 
+        then true 
+        when v.volume_upper_fence_moderate is null then null
+        else false 
+    end as is_volume_spike,
+    case 
+        when v.volume_upper_fence_extreme is not null and l.total_volume > v.volume_upper_fence_extreme 
+        then true 
+        when v.volume_upper_fence_extreme is null then null
+        else false 
+    end as is_extreme_volume_anomaly,
+    -- Sanity Guard: Tỷ lệ volume spike phải nằm trong khoảng hợp lý [0, 200].
+    -- Nới lỏng ngưỡng trần lên 200x để bảo vệ các đợt pump thật không bị nullify.
+    case 
+        when l.total_volume / nullif(v.avg_volume_7d, 0) between 0 and 200 
         then l.total_volume / nullif(v.avg_volume_7d, 0) 
         else null 
     end as volume_spike_ratio
